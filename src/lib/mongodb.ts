@@ -10,7 +10,7 @@ if (!MONGODB_URI) {
 
 interface MongooseCache {
   conn: typeof mongoose | null;
-  promise: Promise<typeof mongoose> | null;
+  promise: Promise<typeof mongoose | null> | null;
 }
 
 // Extend global type to support caching in Next.js development mode
@@ -37,20 +37,31 @@ export async function connectToDatabase() {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
+      serverSelectionTimeoutMS: 2000, // Timeout after 2 seconds instead of 30 seconds
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
-      console.log("🟢 Connected to MongoDB successfully!");
-      return mongooseInstance;
-    });
+    cached.promise = mongoose.connect(MONGODB_URI, opts)
+      .then((mongooseInstance) => {
+        console.log("🟢 Connected to MongoDB successfully!");
+        return mongooseInstance;
+      })
+      .catch((err) => {
+        console.error("🔴 Failed to connect to MongoDB:", err.message || err);
+        return null;
+      });
   }
 
   try {
-    cached.conn = await cached.promise;
+    const conn = await cached.promise;
+    if (!conn) {
+      cached.promise = null; // Reset promise so we can try to connect again in future calls
+      return null;
+    }
+    cached.conn = conn;
   } catch (e) {
     cached.promise = null;
     console.error("🔴 Failed to connect to MongoDB:", e);
-    throw e;
+    return null;
   }
 
   return cached.conn;

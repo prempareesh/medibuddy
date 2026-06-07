@@ -43,7 +43,7 @@ export default function Footer() {
             Dashboard
           </Link>
           <Link href="/analyzer" className="hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors">
-            AI Analyzer
+            Smart Scanner
           </Link>
           <Link href="/symptoms" className="hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors">
             Symptom Chat

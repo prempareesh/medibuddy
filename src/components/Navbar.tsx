@@ -11,7 +11,7 @@ export default function Navbar() {
 
   const navItems = [
     { name: "Overview", href: "/dashboard" },
-    { name: "AI Analyzer", href: "/analyzer" },
+    { name: "Smart Scanner", href: "/analyzer" },
     { name: "Symptom Chat", href: "/symptoms" },
   ];
 
