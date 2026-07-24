@@ -43,17 +43,108 @@ export function evaluateRedFlags(userText: string, intake?: PatientIntakeData): 
 }
 
 export function buildEmergencyPayload(reason: string, language: string = "english"): CDSSPayload {
-  const isHindi = language === "hindi";
-  const isTelugu = language === "telugu";
+  const normLang = language.toLowerCase();
+  const isHindi = normLang === "hindi" || normLang === "hi" || normLang === "hi-in";
+  const isTelugu = normLang === "telugu" || normLang === "te" || normLang === "te-in";
+
+  if (isHindi) {
+    return {
+      riskLevel: "EMERGENCY",
+      emergencyTriggered: true,
+      emergencyNotice: `🚨 आपातकालीन चेतावनी: (${reason})। तुरंत 108 पर कॉल करें या निकटतम अस्पताल ER जाएं।`,
+      patientSummary: `आपातकालीन स्थिति: ${reason}`,
+      primarySymptoms: ["गंभीर आपातकालीन लक्षण"],
+      clinicalAssessment: "तत्काल आपातकालीन पुनर्जीवन और चिकित्सा मूल्यांकन आवश्यक है।",
+      rankedDifferential: [
+        {
+          conditionName: reason,
+          icd10Code: "R99 / Emergency",
+          likelihood: "High",
+          confidenceRange: "90-98%",
+          rationale: "गंभीर आपातकालीन लक्षणों के आधार पर स्थिति।",
+          supportingEvidence: [reason],
+          opposingEvidence: [],
+          missingInfoNeeded: ["आपातकालीन ईसीजी", "वाइटल्स मॉनिटर"]
+        }
+      ],
+      followUpQuestions: [
+        "क्या आप अभी अकेले हैं या आपके साथ कोई मदद के लिए मौजूद है?",
+        "क्या आपको अभी सांस लेने में भारी तकलीफ या सीने में दबाव है?",
+        "क्या 108 आपातकालीन सेवा को कॉल कर दिया गया है?"
+      ],
+      recommendations: [
+        "खुद गाड़ी चलाकर अस्पताल न जाएं।",
+        "तुरंत 108 पर आपातकालीन सेवा को कॉल करें।",
+        "आराम से बैठें और शांत रहें।"
+      ],
+      warningSigns: [
+        "बेहोशी की स्थिति",
+        "चेहरे या होंठों का नीला पड़ना",
+        "अचेत होना"
+      ],
+      recommendedTests: ["आपातकालीन ईसीजी", "ट्रोपोनिन टेस्ट", "रक्त गैस विश्लेषण"],
+      immediateAdvice: "सभी शारीरिक गतिविधियों को तुरंत रोकें और आपातकालीन एम्बुलेंस की प्रतीक्षा करें।",
+      qualityScores: {
+        evidenceStrength: 95,
+        clinicalConfidence: 96,
+        missingInformation: ["तत्काल प्रयोगशाला जांच"],
+        diagnosticCompleteness: 92
+      },
+      disclaimer: "⚠️ आपातकालीन अस्वीकरण: मेडीबडी एआई सीडीएसएस एक सूचनात्मक निर्णय सहायता उपकरण है और आपातकालीन चिकित्सा सेवाओं का स्थान नहीं लेता है।"
+    };
+  }
+
+  if (isTelugu) {
+    return {
+      riskLevel: "EMERGENCY",
+      emergencyTriggered: true,
+      emergencyNotice: `🚨 అత్యవసర హెచ్చరిక: (${reason}). దయచేసి వెంటనే 108 కి కాల్ చేయండి లేదా అత్యవసర ఆసుపత్రికి వెళ్లండి.`,
+      patientSummary: `అత్యవసర మూల్యాంకనం: ${reason}`,
+      primarySymptoms: ["తీవ్రమైన అత్యవసర ప్రమాద సంకేతాలు"],
+      clinicalAssessment: "వెంటనే అత్యవసర వైద్య చికిత్స మరియు స్థిరీకరణ అవసరం.",
+      rankedDifferential: [
+        {
+          conditionName: reason,
+          icd10Code: "R99 / Emergency",
+          likelihood: "High",
+          confidenceRange: "90-98%",
+          rationale: "తీవ్రమైన అత్యవసర ప్రమాద సంకేతాల వలన గుర్తించబడింది.",
+          supportingEvidence: [reason],
+          opposingEvidence: [],
+          missingInfoNeeded: ["ఎమర్జెన్సీ ECG", "వైటల్స్ మానిటర్"]
+        }
+      ],
+      followUpQuestions: [
+        "మీరు ప్రస్తుతం ఒంటరిగా ఉన్నారా లేదా మీకు సహాయం చేయడానికి ఎవరైనా ఉన్నారా?",
+        "మీకు ప్రస్తుతం తీవ్రమైన శ్వాసకోశ ఇబ్బంది లేదా ఛాతీపై ఒత్తిడి ఉందా?",
+        "అత్యవసర సేవలకు (108) సమాచారం అందించారా?"
+      ],
+      recommendations: [
+        "సొంతంగా వాహనం నడుపుతూ ఆసుపత్రికి వెళ్లవద్దు.",
+        "వెంటనే 108 అత్యవసర సేవలకు కాల్ చేయండి.",
+        "ప్రశాంతంగా కూర్చుని విశ్రాంతి తీసుకోండి."
+      ],
+      warningSigns: [
+        "స్పృహ తప్పడం",
+        "పెదవులు/గోళ్లు నీలం రంగులోకి మారడం",
+        "స్పందించని స్థితి"
+      ],
+      recommendedTests: ["ఎమర్జెన్సీ ECG", "ట్రోపోనిన్ పరీక్ష", "బ్లడ్ గ్యాస్ అనాలిసిస్"],
+      immediateAdvice: "వెంటనే అన్ని శారీరక శ్రమలను నిలిపివేసి ఎమర్జెన్సీ అంబులెన్స్ కోసం నిరీక్షించండి.",
+      qualityScores: {
+        evidenceStrength: 95,
+        clinicalConfidence: 96,
+        missingInformation: ["ల్యాబ్ పరీక్షలు"],
+        diagnosticCompleteness: 92
+      },
+      disclaimer: "⚠️ అత్యవసర నిరాకరణ: మెడిబడ్డీ AI CDSS అనేది ఒక సమాచార మద్దతు సాధనం మరియు అత్యవసర వైద్య సేవల స్థానాన్ని భర్తీ చేయదు."
+    };
+  }
 
   return {
     riskLevel: "EMERGENCY",
     emergencyTriggered: true,
-    emergencyNotice: isHindi
-      ? `🚨 आपातकालीन चेतावनी: (${reason})। तुरंत 108 पर कॉल करें या निकटतम अस्पताल ER जाएं।`
-      : isTelugu
-      ? `🚨 అత్యవసర హెచ్చరిక: (${reason}). దయచేసి వెంటనే 108 కి కాల్ చేయండి.`
-      : `🚨 EMERGENCY RED-FLAG ALERT: (${reason}). Please call 108 / 911 or proceed immediately to the nearest Emergency Room.`,
+    emergencyNotice: `🚨 EMERGENCY RED-FLAG ALERT: (${reason}). Please call 108 / 911 or proceed immediately to the nearest Emergency Room.`,
     patientSummary: `Emergency evaluation triggered due to: ${reason}`,
     primarySymptoms: ["Critical Red-Flag Symptoms Present"],
     clinicalAssessment: "Immediate emergency resuscitation and clinical stabilization required.",

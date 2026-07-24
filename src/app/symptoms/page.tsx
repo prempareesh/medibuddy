@@ -39,6 +39,123 @@ interface Message {
   riskLevel?: TriageLevel;
 }
 
+const getInitialWelcomeContent = (lang: "english" | "hindi" | "telugu") => {
+  if (lang === "hindi") {
+    return JSON.stringify({
+      riskLevel: "ROUTINE",
+      emergencyTriggered: false,
+      patientSummary: "रोगी नैदानिक लक्षण मूल्यांकन के लिए उपस्थित हो रहा है।",
+      primarySymptoms: ["मुख्य लक्षण की प्रतीक्षा है"],
+      clinicalAssessment: "मेडीबडी एआई सीडीएसएस सक्रिय है। ICD-10, SNOMED CT, WHO, और NICE नैदानिक दिशानिर्देशों पर आधारित।",
+      rankedDifferential: [
+        {
+          conditionName: "नैदानिक लक्षण मूल्यांकन",
+          icd10Code: "Z00.00",
+          likelihood: "High",
+          confidenceRange: "90-95%",
+          rationale: "कृपया 5-स्तरीय नैदानिक मूल्यांकन शुरू करने के लिए लक्षण विवरण प्रदान करें।",
+          supportingEvidence: ["सिस्टम प्रारंभ किया गया"],
+          opposingEvidence: [],
+          missingInfoNeeded: ["लक्षण विवरण", "वाइटल्स"]
+        }
+      ],
+      followUpQuestions: [
+        "आज आपको किस मुख्य लक्षण के कारण परामर्श लेना पड़ रहा है?",
+        "आपको यह लक्षण कितने समय से महसूस हो रहे हैं?",
+        "क्या आपको बुखार या उच्च रक्तचाप की समस्या है?"
+      ],
+      recommendations: [
+        "सटीक जांच के लिए ऊपर दिए गए 22-मापदंडों वाले फ़ॉर्म को भरें।",
+        "अपने शुरुआती लक्षणों का विस्तार से वर्णन करें।"
+      ],
+      warningSigns: [
+        "अचानक सीने में दर्द, सांस लेने में तकलीफ या स्ट्रोक के लक्षणों के लिए आपातकालीन चिकित्सा की आवश्यकता होती है।"
+      ],
+      recommendedTests: ["नैदानिक वाइटल्स जांच"],
+      immediateAdvice: "अपने लक्षणों का वर्णन करें या नीचे त्वरित प्रश्न चुनें।",
+      qualityScores: { evidenceStrength: 90, clinicalConfidence: 92, missingInformation: ["मुख्य लक्षण"], diagnosticCompleteness: 85 },
+      disclaimer: "⚠️ नैदानिक अस्वीकरण: मेडीबडी एआई सीडीएसएस एक स्वचालित निर्णय सहायता उपकरण है और औपचारिक चिकित्सा निदान प्रदान नहीं करता है।"
+    });
+  }
+  if (lang === "telugu") {
+    return JSON.stringify({
+      riskLevel: "ROUTINE",
+      emergencyTriggered: false,
+      patientSummary: "రోగి క్లినికల్ లక్షణాల మూల్యాంకనం కోసం హాజరవుతున్నారు.",
+      primarySymptoms: ["ముఖ్య లక్షణం కోసం వేచి చూస్తోంది"],
+      clinicalAssessment: "మెడిబడ్డీ AI CDSS యాక్టివ్‌గా ఉంది. ICD-10, SNOMED CT, WHO మరియు NICE క్లినికల్ మార్గదర్శకాల ఆధారంగా పనిచేస్తుంది.",
+      rankedDifferential: [
+        {
+          conditionName: "క్లినికల్ లక్షణాల మూల్యాంకనం",
+          icd10Code: "Z00.00",
+          likelihood: "High",
+          confidenceRange: "90-95%",
+          rationale: "5-స్థాయి క్లినికల్ ట్రయేజ్‌ను ప్రారంభించడానికి దయచేసి మీ లక్షణాలను వివరిించండి.",
+          supportingEvidence: ["సిస్టమ్ ప్రారంభించబడింది"],
+          opposingEvidence: [],
+          missingInfoNeeded: ["లక్షణాల వివరాలు", "వైటల్స్"]
+        }
+      ],
+      followUpQuestions: [
+        "ఈరోజు మిమ్మల్ని ఇక్కడకు తీసుకువచ్చిన ప్రాథమిక లక్షణం ఏమిటి?",
+        "మీరు ఈ లక్షణాలను ఎంతకాలంగా అనుభవిస్తున్నారు?",
+        "మీకు జ్వరం లేదా అధిక రక్తపోటు రీడింగ్ ఉందా?"
+      ],
+      recommendations: [
+        "ఖచ్చితమైన విశ్లేషణ కోసం పైన ఉన్న 22-పారామితుల ఇన్టేక్ ఫారమ్‌ను పూర్తి చేయండి.",
+        "మీ లక్షణాలను వివరంగా వివరిించండి."
+      ],
+      warningSigns: [
+        "హఠాత్తుగా ఛాతీ నెప్పి, శ్వాస తీసుకోవడంలో ఇబ్బంది లేదా పక్షవాతం లక్షణాలు కనిపిస్తే అత్యవసర వైద్య మూల్యాంకనం అవసరం."
+      ],
+      recommendedTests: ["వైటల్స్ పరీక్ష"],
+      immediateAdvice: "మీ లక్షణాలను వివరిించండి లేదా క్రింద ఉన్న ప్రశ్నను ఎంచుకోండి.",
+      qualityScores: { evidenceStrength: 90, clinicalConfidence: 92, missingInformation: ["ప్రధాన లక్షణాలు"], diagnosticCompleteness: 85 },
+      disclaimer: "⚠️ క్లినికల్ నిరాకరణ: మెడిబడ్డీ AI CDSS అనేది ఒక స్వయంచాలక మద్దతు సాధనం మరియు అధికారిక వైద్య నిర్ధారణను అందించదు."
+    });
+  }
+  return JSON.stringify({
+    riskLevel: "ROUTINE",
+    emergencyTriggered: false,
+    patientSummary: "Patient presenting for clinical symptom assessment.",
+    primarySymptoms: ["Awaiting chief complaint"],
+    clinicalAssessment: "MediBuddy AI CDSS active. Grounded in ICD-10, SNOMED CT, WHO, and NICE clinical guidelines.",
+    rankedDifferential: [
+      {
+        conditionName: "Clinical Symptom Triage Assessment",
+        icd10Code: "Z00.00",
+        likelihood: "High",
+        confidenceRange: "90-95%",
+        rationale: "Please complete patient vitals and describe symptoms to initialize 5-level clinical triage.",
+        supportingEvidence: ["System initialized"],
+        opposingEvidence: [],
+        missingInfoNeeded: ["Symptom description", "Vitals"]
+      }
+    ],
+    followUpQuestions: [
+      "What primary symptom prompted your visit today?",
+      "How long have you been experiencing these symptoms?",
+      "Do you have a fever or high blood pressure reading?"
+    ],
+    recommendations: [
+      "Complete the 22-parameter clinical intake form above for tailored triage accuracy.",
+      "Describe any onset symptoms in detail."
+    ],
+    warningSigns: [
+      "Sudden chest pain, respiratory distress, or stroke signs require emergency medical evaluation."
+    ],
+    recommendedTests: ["Clinical Vitals Check"],
+    immediateAdvice: "Describe your symptoms or select a quick check below.",
+    qualityScores: {
+      evidenceStrength: 90,
+      clinicalConfidence: 92,
+      missingInformation: ["Chief Complaint"],
+      diagnosticCompleteness: 85
+    },
+    disclaimer: "⚠️ CLINICAL DISCLAIMER: MediBuddy AI CDSS is an automated triage decision support tool and does not provide formal medical diagnosis."
+  });
+};
+
 const playCalmChime = () => {
   if (typeof window === "undefined") return;
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -63,50 +180,12 @@ const playCalmChime = () => {
 };
 
 export default function ClinicalTriageAssistant() {
+  const [language, setLanguage] = useState<"english" | "hindi" | "telugu">("english");
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome-1",
       role: "assistant",
-      content: JSON.stringify({
-        riskLevel: "ROUTINE",
-        emergencyTriggered: false,
-        patientSummary: "Patient presenting for clinical symptom assessment.",
-        primarySymptoms: ["Awaiting chief complaint"],
-        clinicalAssessment: "MediBuddy AI CDSS active. Grounded in ICD-10, SNOMED CT, WHO, and NICE clinical guidelines.",
-        rankedDifferential: [
-          {
-            conditionName: "Clinical Symptom Triage Assessment",
-            icd10Code: "Z00.00",
-            likelihood: "High",
-            confidenceRange: "90-95%",
-            rationale: "Please complete patient vitals and describe symptoms to initialize 5-level clinical triage.",
-            supportingEvidence: ["System initialized"],
-            opposingEvidence: [],
-            missingInfoNeeded: ["Symptom description", "Vitals"]
-          }
-        ],
-        followUpQuestions: [
-          "What primary symptom prompted your visit today?",
-          "How long have you been experiencing these symptoms?",
-          "Do you have a fever or high blood pressure reading?"
-        ],
-        recommendations: [
-          "Complete the 22-parameter clinical intake form above for tailored triage accuracy.",
-          "Describe any onset symptoms in detail."
-        ],
-        warningSigns: [
-          "Sudden chest pain, respiratory distress, or stroke signs require emergency medical evaluation."
-        ],
-        recommendedTests: ["Clinical Vitals Check"],
-        immediateAdvice: "Describe your symptoms or select a quick check below.",
-        qualityScores: {
-          evidenceStrength: 90,
-          clinicalConfidence: 92,
-          missingInformation: ["Chief Complaint"],
-          diagnosticCompleteness: 85
-        },
-        disclaimer: "⚠️ CLINICAL DISCLAIMER: MediBuddy AI CDSS is an automated triage decision support tool and does not provide formal medical diagnosis."
-      }),
+      content: getInitialWelcomeContent("english"),
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       riskLevel: "ROUTINE"
     }
@@ -114,7 +193,6 @@ export default function ClinicalTriageAssistant() {
 
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [language, setLanguage] = useState<"english" | "hindi" | "telugu">("english");
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showIntakeDrawer, setShowIntakeDrawer] = useState(true);
@@ -147,6 +225,19 @@ export default function ClinicalTriageAssistant() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  const handleLanguageSelect = (newLang: "english" | "hindi" | "telugu") => {
+    setLanguage(newLang);
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].id === "welcome-1") {
+        return [{
+          ...prev[0],
+          content: getInitialWelcomeContent(newLang)
+        }];
+      }
+      return prev;
+    });
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -194,13 +285,13 @@ export default function ClinicalTriageAssistant() {
     let cleanText = text;
     try {
       const parsed: CDSSPayload = JSON.parse(text);
-      cleanText = parsed.patientSummary || parsed.immediateAdvice || text;
+      cleanText = parsed.patientSummary || parsed.immediateAdvice || parsed.clinicalAssessment || text;
     } catch (e) {
       cleanText = text.replace(/[*#]/g, "");
     }
 
-    const utterance = new SpeechSynthesisUtterance(cleanText.slice(0, 200));
-    utterance.lang = language === "hindi" ? "hi-IN" : language === "telugu" ? "te-IN" : "en-US";
+    const utterance = new SpeechSynthesisUtterance(cleanText.slice(0, 300));
+    utterance.lang = language === "hindi" ? "hi-IN" : language === "telugu" ? "te-IN" : "en-IN";
     utterance.rate = 0.95;
     window.speechSynthesis.speak(utterance);
   };
@@ -225,8 +316,10 @@ export default function ClinicalTriageAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          symptoms: text,
+          preferredLanguage: language,
+          language: language,
           messages: [...messages, userMsg],
-          language,
           patientContext: intake
         }),
       });
@@ -435,12 +528,12 @@ export default function ClinicalTriageAssistant() {
           <div className="flex items-center gap-3">
             <select
               value={language}
-              onChange={(e: any) => setLanguage(e.target.value)}
+              onChange={(e: any) => handleLanguageSelect(e.target.value)}
               className="h-10 px-3 rounded-xl bg-white border border-slate-200/80 text-xs font-bold text-slate-700 shadow-sm cursor-pointer"
             >
-              <option value="english">English (IN)</option>
-              <option value="hindi">Hindi (हिन्दी)</option>
-              <option value="telugu">Telugu (తెలుగు)</option>
+              <option value="english">English (en-IN)</option>
+              <option value="hindi">Hindi (hi-IN)</option>
+              <option value="telugu">Telugu (te-IN)</option>
             </select>
 
             <button
@@ -610,7 +703,13 @@ export default function ClinicalTriageAssistant() {
               <div className="flex justify-start">
                 <div className="bg-slate-100 rounded-2xl p-4 text-xs font-bold text-slate-500 animate-pulse flex items-center gap-2">
                   <Activity className="w-4 h-4 text-emerald-600 animate-spin" />
-                  <span>Evaluating ICD-10 differential rules & 5-level clinical triage...</span>
+                  <span>
+                    {language === "hindi"
+                      ? "ICD-10 नियमों और 5-स्तरीय नैदानिक मूल्यांकन की जांच की जा रही है..."
+                      : language === "telugu"
+                      ? "ICD-10 నిబంధనలు & 5-స్థాయి క్లినికల్ ట్రయేజ్‌ను మూల్యాంకనం చేస్తోంది..."
+                      : "Evaluating ICD-10 differential rules & 5-level clinical triage..."}
+                  </span>
                 </div>
               </div>
             )}
@@ -633,7 +732,19 @@ export default function ClinicalTriageAssistant() {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-              placeholder={isListening ? "Listening aloud..." : "Describe symptoms in detail (e.g. chest pain, dry cough, dizziness)..."}
+              placeholder={
+                language === "hindi"
+                  ? isListening
+                    ? "सुन रहा हूँ..."
+                    : "लक्षणों का विस्तार से वर्णन करें (जैसे सीने में दर्द, सूखी खांसी, चक्कर आना)..."
+                  : language === "telugu"
+                  ? isListening
+                    ? "వింటున్నాను..."
+                    : "లక్షణాలను వివరంగా చెప్పండి (ఉదా. ఛాతీ నెప్పి, పొడి దగ్గు, తలతిరగడం)..."
+                  : isListening
+                  ? "Listening aloud..."
+                  : "Describe symptoms in detail (e.g. chest pain, dry cough, dizziness)..."
+              }
               className="flex-1 h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium focus:outline-none focus:border-emerald-500 focus:bg-white transition"
             />
 
@@ -642,7 +753,9 @@ export default function ClinicalTriageAssistant() {
               disabled={isLoading || !inputMessage.trim()}
               className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition active:scale-97 cursor-pointer shrink-0 flex items-center justify-center gap-2"
             >
-              <span>CDSS Triage</span>
+              <span>
+                {language === "hindi" ? "लक्षण जांच" : language === "telugu" ? "లక్షణాల తనిఖీ" : "CDSS Triage"}
+              </span>
               <Send className="w-4 h-4" />
             </button>
           </div>
