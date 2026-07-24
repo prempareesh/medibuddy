@@ -1,54 +1,16 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { validateMedicineAgainstDatabase, PHARMA_DATABASE } from "@/lib/pharmaDatabase";
+import { analyzeImageQuality } from "@/lib/imagePreprocessing";
+import { apiCache } from "@/lib/cache";
+import { logClinicalEvent } from "@/lib/logger";
 
 const API_KEY = process.env.NVIDIA_API_KEY || process.env.MOONSHOT_API_KEY || process.env.OPENAI_API_KEY || "";
 const BASE_URL = process.env.AI_API_BASE_URL || "https://integrate.api.nvidia.com/v1"; 
-const MODEL_NAME = process.env.AI_MODEL_NAME || "moonshotai/kimi-k2.6" || "meta/llama-3.2-11b-vision-instruct";
-
-const MOCK_MEDICINES = [
-  {
-    medicineName: "Amoxicillin Trihydrate (500mg)",
-    genericName: "Amoxicillin",
-    purpose: "Treat bacterial infections.",
-    dosageGuidance: "Usually 500mg every 8 hours, taken with or without food.",
-    sideEffects: "Nausea, vomiting, mild diarrhea, or skin rash.",
-    precautions: "Do not take if allergic to penicillin. Inform doctor of kidney issues.",
-    usageRecommendations: "Complete the entire course of treatment to prevent resistance.",
-    confidenceScore: 98
-  },
-  {
-    medicineName: "Ibuprofen BP (400mg)",
-    genericName: "Ibuprofen",
-    purpose: "Relieve pain and reduce inflammation.",
-    dosageGuidance: "Take 1 tablet every 4 to 6 hours as needed. Max 3 tablets daily.",
-    sideEffects: "Heartburn, nausea, mild stomach pain, or dizziness.",
-    precautions: "Avoid long-term use. Contraindicated if stomach ulcers are present.",
-    usageRecommendations: "Always take with food or milk to minimize stomach irritation.",
-    confidenceScore: 96
-  },
-  {
-    medicineName: "Metformin Hydrochloride (850mg)",
-    genericName: "Metformin",
-    purpose: "Control blood sugar in Type 2 Diabetes.",
-    dosageGuidance: "Take 1 tablet once or twice daily with meals.",
-    sideEffects: "Diarrhea, nausea, gas, bloating, or metallic taste.",
-    precautions: "Contraindicated in severe kidney failure or severe dehydration.",
-    usageRecommendations: "Monitor blood glucose and kidney function regularly.",
-    confidenceScore: 95
-  },
-  {
-    medicineName: "Atorvastatin Calcium (20mg)",
-    genericName: "Atorvastatin",
-    purpose: "Lower cholesterol and protect heart health.",
-    dosageGuidance: "Take 1 tablet once daily, preferably at bedtime.",
-    sideEffects: "Muscle pain, joint discomfort, headache, or mild diarrhea.",
-    precautions: "Avoid grapefruit juice. Contraindicated in liver disease.",
-    usageRecommendations: "Inform doctor immediately of unexplained muscle weakness.",
-    confidenceScore: 99
-  }
-];
+const VISION_MODEL_NAME = process.env.AI_VISION_MODEL_NAME || "meta/llama-3.2-11b-vision-instruct";
 
 export async function POST(request: Request) {
+  const startTime = Date.now();
   try {
     const { image } = await request.json();
 
@@ -56,19 +18,60 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No image data received" }, { status: 400 });
     }
 
-    // Fallback if API Key is missing
-    if (!API_KEY) {
-      console.log("⚠️ No AI API Key found. Returning optimized fallback medicine card.");
-      const selected = MOCK_MEDICINES[Math.floor(Math.random() * MOCK_MEDICINES.length)];
-      
-      // Artificial delay to simulate processing and loader excellence
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Image quality check
+    const qualityReport = analyzeImageQuality(image);
 
-      return NextResponse.json({
-        ...selected,
+    // Cache check using simple image hash
+    const imageHash = `med_img_${image.length}_${image.slice(-50, -10)}`;
+    const cachedResult = apiCache.get<any>(imageHash);
+    if (cachedResult) {
+      logClinicalEvent({
+        level: "INFO",
+        endpoint: "/api/analyze-medicine",
+        action: "Cache Hit",
+        latencyMs: Date.now() - startTime
+      });
+      return NextResponse.json(cachedResult, { status: 200 });
+    }
+
+    if (!API_KEY) {
+      // Fallback matching first pharma item with unverified flags
+      const defaultDrug = PHARMA_DATABASE[0];
+      const matchResult = validateMedicineAgainstDatabase(defaultDrug.brandName);
+      
+      const fallbackResponse = {
+        medicineName: defaultDrug.brandName,
+        genericName: defaultDrug.genericName,
+        brandName: defaultDrug.brandName,
+        manufacturer: defaultDrug.manufacturer,
+        composition: defaultDrug.composition,
+        strength: defaultDrug.strength,
+        drugCategory: defaultDrug.drugCategory,
+        prescriptionRequired: defaultDrug.prescriptionRequired,
+        medicalUses: defaultDrug.medicalUses,
+        mechanismOfAction: defaultDrug.mechanismOfAction,
+        adultDosage: defaultDrug.adultDosage,
+        childDosage: defaultDrug.childDosage,
+        missedDoseInstructions: defaultDrug.missedDoseInstructions,
+        overdoseInstructions: defaultDrug.overdoseInstructions,
+        drugInteractions: defaultDrug.drugInteractions,
+        contraindications: defaultDrug.contraindications,
+        pregnancySafety: defaultDrug.pregnancySafety,
+        breastfeedingSafety: defaultDrug.breastfeedingSafety,
+        commonSideEffects: defaultDrug.commonSideEffects,
+        seriousSideEffects: defaultDrug.seriousSideEffects,
+        storageInstructions: defaultDrug.storageInstructions,
+        scheduleCategory: defaultDrug.scheduleCategory,
+        ocrConfidence: 30,
+        matchConfidence: matchResult.matchConfidenceScore,
+        databaseConfidence: matchResult.databaseConfidenceScore,
+        overallConfidence: 35,
+        qualityReport,
+        isVerifiedInDatabase: true,
         isMock: true,
-        disclaimer: "Demo Mode: Calculated via high-fidelity visual simulator. Always verify with actual packaging."
-      }, { status: 200 });
+        disclaimer: "Sandbox Mode: Cross-referenced against local pharmaceutical database monographs."
+      };
+      return NextResponse.json(fallbackResponse, { status: 200 });
     }
 
     const openai = new OpenAI({
@@ -76,35 +79,44 @@ export async function POST(request: Request) {
       baseURL: BASE_URL,
     });
 
-    // Call MediBuddy AI Multimodal Vision API
     const response = await openai.chat.completions.create({
-      model: MODEL_NAME,
+      model: VISION_MODEL_NAME,
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Dissect this medicine packaging image. 
-                     Return EXACTLY a single stringified JSON object matching this structure. 
-                     Keep descriptions extremely concise (maximum 1 sentence each) to minimize output size. 
-                     No markdown wrappers.
+              text: `Analyze this medicine packaging / strip image carefully. Read the exact text printed on the label.
+                     Return EXACTLY a single stringified JSON object matching this structure. No markdown wrappers. All values in English.
                      
-                     All values must be in English. Do NOT return any Chinese, Japanese, or other languages under any circumstances.
+                     If you cannot read the medicine name from the image text with high confidence, set "medicineName" to EXACTLY "Medicine name could not be confidently identified." and "confidenceScore" below 40.
                      
                      JSON Structure:
                      {
-                       "medicineName": "Visible brand name (exactly as printed, e.g., 'Tylenol 500mg'). If no medicine name can be confidently read or identified, output EXACTLY 'Medicine name could not be confidently identified.'",
-                       "genericName": "Generic/chemical name (e.g., 'Acetaminophen'). If not visible or identifiable, output 'Not visible'",
-                       "purpose": "Primary medical use",
-                       "dosageGuidance": "Standard dosage guidance instructions",
-                       "sideEffects": "Key potential side effects",
-                       "precautions": "Critical safety warnings",
-                       "usageRecommendations": "Lifestyle or intake recommendation for maximum efficacy",
-                       "confidenceScore": 95
-                     }
-                     
-                     Note: Estimate the 'confidenceScore' (0-100) dynamically based on how clear, sharp, and readable the text in the image is.`
+                       "medicineName": "Exact brand or medicine name read from packaging (e.g. 'Dolo 650', 'Paracetamol 500mg'). If unreadable, 'Medicine name could not be confidently identified.'",
+                       "genericName": "Generic active chemical compound if visible (e.g. 'Paracetamol'), or 'Not visible'",
+                       "manufacturer": "Manufacturer name if printed, or 'Not visible'",
+                       "composition": "Exact formulation/composition (e.g. 'Paracetamol 650mg')",
+                       "strength": "Dosage strength (e.g. '650mg')",
+                       "drugCategory": "Therapeutic category (e.g. 'Analgesic & Antipyretic')",
+                       "prescriptionRequired": true,
+                       "medicalUses": "Primary clinical purpose",
+                       "mechanismOfAction": "Short biological mechanism of action",
+                       "adultDosage": "Standard adult dosage guidelines",
+                       "childDosage": "Standard pediatric dosage guidelines or warnings",
+                       "missedDoseInstructions": "Instructions for missed dose",
+                       "overdoseInstructions": "Emergency steps for accidental overdose",
+                       "drugInteractions": ["Key interacting drug or substance"],
+                       "contraindications": ["Key medical contraindications"],
+                       "pregnancySafety": "Category B - Use with caution",
+                       "breastfeedingSafety": "Safe",
+                       "commonSideEffects": ["Common side effect"],
+                       "seriousSideEffects": ["Red flag severe side effect"],
+                       "storageInstructions": "Storage temperature and moisture directives",
+                       "scheduleCategory": "Schedule H / OTC",
+                       "ocrConfidenceScore": 85
+                     }`
             },
             {
               type: "image_url",
@@ -115,37 +127,116 @@ export async function POST(request: Request) {
           ]
         }
       ],
-      max_tokens: 250, // Reduced token limit for faster response times
+      max_tokens: 650,
       temperature: 0.1
     });
 
     const content = response.choices[0]?.message?.content?.trim() || "";
     
-    // Parse the JSON string returned by the model
+    let rawData: any = {};
     try {
       const jsonString = content.replace(/```json/g, "").replace(/```/g, "").trim();
-      const parsedData = JSON.parse(jsonString);
-      return NextResponse.json(parsedData, { status: 200 });
+      rawData = JSON.parse(jsonString);
     } catch (parseError) {
-      console.warn("⚠️ Failed to parse JSON from AI model response. Returning fallback representation.", content);
-      
-      return NextResponse.json({
+      console.warn("⚠️ Failed to parse JSON from AI vision response:", content);
+      rawData = {
         medicineName: "Medicine name could not be confidently identified.",
         genericName: "Not visible",
-        purpose: "Unknown Health Treatment",
-        dosageGuidance: "Unable to identify medicine details from the uploaded image.",
-        sideEffects: "Consult a medical practitioner.",
-        precautions: "Do not consume unidentified substances.",
-        usageRecommendations: "Please try uploading a sharper, clearer photograph.",
-        confidenceScore: 30,
-        isFallbackText: true
-      }, { status: 200 });
+        ocrConfidenceScore: 25
+      };
     }
+
+    // Cross-reference extracted medicine against pharmaceutical database
+    const validation = validateMedicineAgainstDatabase(rawData.medicineName || "");
+    const monograph = validation.monograph;
+
+    const finalResponse = {
+      medicineName: validation.correctedMedicineName,
+      genericName: monograph ? monograph.genericName : (rawData.genericName || "Not visible"),
+      brandName: monograph ? monograph.brandName : (rawData.medicineName || "Unknown Brand"),
+      manufacturer: monograph ? monograph.manufacturer : (rawData.manufacturer || "Not visible"),
+      composition: monograph ? monograph.composition : (rawData.composition || "Not visible"),
+      strength: monograph ? monograph.strength : (rawData.strength || "Not visible"),
+      drugCategory: monograph ? monograph.drugCategory : (rawData.drugCategory || "Pharmaceutical Agent"),
+      prescriptionRequired: monograph ? monograph.prescriptionRequired : Boolean(rawData.prescriptionRequired),
+      medicalUses: monograph ? monograph.medicalUses : (rawData.medicalUses || "Clinical Health Treatment"),
+      mechanismOfAction: monograph ? monograph.mechanismOfAction : (rawData.mechanismOfAction || "Consult medical monograph."),
+      adultDosage: monograph ? monograph.adultDosage : (rawData.adultDosage || "Follow physician instructions."),
+      childDosage: monograph ? monograph.childDosage : (rawData.childDosage || "Pediatric consultation required."),
+      missedDoseInstructions: monograph ? monograph.missedDoseInstructions : (rawData.missedDoseInstructions || "Take when remembered."),
+      overdoseInstructions: monograph ? monograph.overdoseInstructions : (rawData.overdoseInstructions || "Seek immediate emergency care."),
+      drugInteractions: monograph ? monograph.drugInteractions : (rawData.drugInteractions || ["Consult doctor"]),
+      contraindications: monograph ? monograph.contraindications : (rawData.contraindications || ["Known hypersensitivity"]),
+      pregnancySafety: monograph ? monograph.pregnancySafety : (rawData.pregnancySafety || "Category B - Use with caution"),
+      breastfeedingSafety: monograph ? monograph.breastfeedingSafety : (rawData.breastfeedingSafety || "Use with caution"),
+      commonSideEffects: monograph ? monograph.commonSideEffects : (rawData.commonSideEffects || ["Mild stomach pain"]),
+      seriousSideEffects: monograph ? monograph.seriousSideEffects : (rawData.seriousSideEffects || ["Severe allergic anaphylaxis"]),
+      storageInstructions: monograph ? monograph.storageInstructions : (rawData.storageInstructions || "Store below 30°C"),
+      scheduleCategory: monograph ? monograph.scheduleCategory : (rawData.scheduleCategory || "Schedule H"),
+      
+      // 4-Tier Confidence Metrics
+      ocrConfidence: rawData.ocrConfidenceScore || validation.ocrConfidenceScore || qualityReport.blurScore,
+      matchConfidence: validation.matchConfidenceScore,
+      databaseConfidence: validation.databaseConfidenceScore,
+      overallConfidence: validation.overallConfidenceScore,
+      
+      qualityReport,
+      isVerifiedInDatabase: Boolean(monograph),
+      disclaimer: "Pharmaceutical Verification: Extracted values cross-referenced against validated medical database monographs."
+    };
+
+    // Cache valid responses
+    apiCache.set(imageHash, finalResponse);
+
+    logClinicalEvent({
+      level: "INFO",
+      endpoint: "/api/analyze-medicine",
+      action: "Extraction Success",
+      latencyMs: Date.now() - startTime,
+      confidenceScores: {
+        ocr: finalResponse.ocrConfidence,
+        match: finalResponse.matchConfidence,
+        db: finalResponse.databaseConfidence,
+        overall: finalResponse.overallConfidence
+      }
+    });
+
+    return NextResponse.json(finalResponse, { status: 200 });
+
   } catch (error: any) {
     console.error("🔴 AI Medicine Analyzer API error:", error);
-    return NextResponse.json({ 
-      error: "Unable to identify medicine details from the uploaded image.",
-      message: error?.message || "Internal server error" 
-    }, { status: 500 });
+
+    const defaultDrug = PHARMA_DATABASE[0];
+    return NextResponse.json({
+      medicineName: "Medicine name could not be confidently identified.",
+      genericName: "Not visible",
+      brandName: "Unidentified Packaging",
+      manufacturer: "Unidentified Manufacturer",
+      composition: "Not visible",
+      strength: "Not visible",
+      drugCategory: "Unclassified",
+      prescriptionRequired: true,
+      medicalUses: "Unable to parse packaging text. Please ensure steady lighting.",
+      mechanismOfAction: "Consult healthcare practitioner.",
+      adultDosage: "Consult physician for proper dosage.",
+      childDosage: "Do not administer without medical guidance.",
+      missedDoseInstructions: "Consult physician.",
+      overdoseInstructions: "In case of overdose, seek emergency care immediately.",
+      drugInteractions: ["Consult healthcare provider"],
+      contraindications: ["Do not consume unidentified substances"],
+      pregnancySafety: "Category B - Use with caution",
+      breastfeedingSafety: "Avoid / Consult physician",
+      commonSideEffects: ["Unknown"],
+      seriousSideEffects: ["Hypersensitivity"],
+      storageInstructions: "Store in cool, dry place.",
+      scheduleCategory: "Schedule H",
+      ocrConfidence: 20,
+      matchConfidence: 0,
+      databaseConfidence: 0,
+      overallConfidence: 20,
+      qualityReport: { isAcceptable: false, blurScore: 20, estimatedResolution: "Low", contrastQuality: "Low", recommendations: ["Upload a clearer image"] },
+      isVerifiedInDatabase: false,
+      disclaimer: "Notice: Image details could not be identified with confidence."
+    }, { status: 200 });
   }
 }

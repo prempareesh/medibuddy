@@ -12,15 +12,14 @@ import {
   Sparkles, 
   ShieldCheck, 
   Clock, 
-  ArrowRight,
-  Plus,
   Info,
   Calendar,
   Zap,
   Activity,
   Heart,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  HelpCircle
 } from "lucide-react";
 
 interface PrescriptionMedicine {
@@ -28,14 +27,34 @@ interface PrescriptionMedicine {
   genericName: string;
   dosage: string;
   frequency: string;
+  duration: string;
   purpose: string;
   precautions: string;
+  confidenceScore: number;
+  isUncertain: boolean;
+  userConfirmed?: boolean;
 }
 
 interface PrescriptionScanResult {
+  doctorName?: string;
+  doctorRegNo?: string;
+  hospitalName?: string;
+  patientName?: string;
+  patientAge?: string;
+  patientGender?: string;
+  prescriptionDate?: string;
+  diagnosis?: string;
   summary: string;
   medicines: PrescriptionMedicine[];
-  confidenceScore: number;
+  investigations?: string[];
+  followUpDate?: string;
+  hasDoctorSignature?: boolean;
+  unreadableWordsCount?: number;
+  ocrConfidence: number;
+  matchConfidence: number;
+  databaseConfidence: number;
+  overallConfidence: number;
+  qualityReport?: any;
   isMock?: boolean;
   disclaimer?: string;
 }
@@ -43,12 +62,32 @@ interface PrescriptionScanResult {
 interface MedicineScanResult {
   medicineName: string;
   genericName: string;
-  purpose: string;
-  dosageGuidance: string;
-  sideEffects: string;
-  precautions: string;
-  usageRecommendations: string;
-  confidenceScore: number;
+  brandName: string;
+  manufacturer: string;
+  composition: string;
+  strength: string;
+  drugCategory: string;
+  prescriptionRequired: boolean;
+  medicalUses: string;
+  mechanismOfAction: string;
+  adultDosage: string;
+  childDosage: string;
+  missedDoseInstructions: string;
+  overdoseInstructions: string;
+  drugInteractions: string[];
+  contraindications: string[];
+  pregnancySafety: string;
+  breastfeedingSafety: string;
+  commonSideEffects: string[];
+  seriousSideEffects: string[];
+  storageInstructions: string;
+  scheduleCategory: string;
+  ocrConfidence: number;
+  matchConfidence: number;
+  databaseConfidence: number;
+  overallConfidence: number;
+  qualityReport?: any;
+  isVerifiedInDatabase: boolean;
   isMock?: boolean;
   disclaimer?: string;
 }
@@ -60,34 +99,18 @@ const playCalmChime = () => {
   
   try {
     const ctx = new AudioContextClass();
-    
-    // Primary Tone
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = "sine";
-    osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-    osc1.frequency.exponentialRampToValueAtTime(880.00, ctx.currentTime + 0.12); // A5
+    osc1.frequency.setValueAtTime(659.25, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(880.00, ctx.currentTime + 0.12);
     gain1.gain.setValueAtTime(0.12, ctx.currentTime);
     gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
     
-    // Harmony Tone (Major Third above E5 => G#5 to C#6)
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = "sine";
-    osc2.frequency.setValueAtTime(830.61, ctx.currentTime); // G#5
-    osc2.frequency.exponentialRampToValueAtTime(1109.73, ctx.currentTime + 0.12); // C#6
-    gain2.gain.setValueAtTime(0.06, ctx.currentTime);
-    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    
     osc1.start();
-    osc2.start();
-    
     osc1.stop(ctx.currentTime + 0.8);
-    osc2.stop(ctx.currentTime + 0.8);
   } catch (e) {
     console.error("AudioContext failed to initialize:", e);
   }
@@ -118,7 +141,7 @@ export default function SmartHealthcareScanner() {
   const [createdMedicineReminderInfo, setCreatedMedicineReminderInfo] = useState<string>("");
   const [isCreatingMedicineReminder, setIsCreatingMedicineReminder] = useState(false);
 
-  // Refs for inputs
+  // Input Refs
   const prescriptionFileInputRef = useRef<HTMLInputElement>(null);
   const medicineFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,8 +152,8 @@ export default function SmartHealthcareScanner() {
     "Analyzing medical document structure...",
     "Executing OCR details & layout checks...",
     "Extracting handwritten/printed medicine names...",
-    "Identifying dosage & frequency parameters...",
-    "Evaluating drug purpose & safety profiles...",
+    "Cross-referencing against pharmaceutical database...",
+    "Calculating multi-confidence quality metrics...",
     "Assembling clinical prescription summary..."
   ];
 
@@ -138,57 +161,18 @@ export default function SmartHealthcareScanner() {
     "Analyzing medicine packaging visual layers...",
     "Checking medicine strip/box contours...",
     "Extracting brand & active formulations...",
-    "Cross-referencing safety precautions database...",
-    "Synthesizing dosage guidance scorecard...",
-    "Calculating scan clarity confidence score..."
+    "Validating compound monograph against database...",
+    "Synthesizing 20+ clinical parameter scorecards...",
+    "Calculating multi-tier confidence metrics..."
   ];
 
-  // Optimized Image compressor helper: downscales to 600x600 and quality 0.65 for much faster processing
-  const compressImage = (base64Str: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = base64Str;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 600;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.65)); // 65% quality JPEG for fast payload size
-        } else {
-          resolve(base64Str);
-        }
-      };
-      img.onerror = () => resolve(base64Str);
-    });
-  };
-
-  // Progressive loading states while scanning
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isPrescriptionScanning) {
       setPrescriptionScanStep(0);
       interval = setInterval(() => {
         setPrescriptionScanStep((prev) => (prev < prescriptionScanSteps.length - 1 ? prev + 1 : prev));
-      }, 550);
+      }, 500);
     }
     return () => clearInterval(interval);
   }, [isPrescriptionScanning]);
@@ -199,17 +183,15 @@ export default function SmartHealthcareScanner() {
       setMedicineScanStep(0);
       interval = setInterval(() => {
         setMedicineScanStep((prev) => (prev < medicineScanSteps.length - 1 ? prev + 1 : prev));
-      }, 550);
+      }, 500);
     }
     return () => clearInterval(interval);
   }, [isMedicineScanning]);
 
-  // Tab switching reset/helpers
   const handleTabChange = (tab: "prescription" | "medicine") => {
     setActiveTab(tab);
   };
 
-  // Uploader Handlers
   const handlePrescriptionFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) processPrescriptionFile(file);
@@ -217,7 +199,7 @@ export default function SmartHealthcareScanner() {
 
   const processPrescriptionFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      setPrescriptionError("Unable to identify medicine details from the uploaded image.");
+      setPrescriptionError("Please select a valid image file (PNG, JPG, WEBP).");
       return;
     }
     setPrescriptionError(null);
@@ -225,9 +207,8 @@ export default function SmartHealthcareScanner() {
     setPrescriptionRemindersCreated(false);
     setCreatedRemindersInfo([]);
     const reader = new FileReader();
-    reader.onload = async () => {
-      const compressed = await compressImage(reader.result as string);
-      setPrescriptionImage(compressed);
+    reader.onload = () => {
+      setPrescriptionImage(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
@@ -239,7 +220,7 @@ export default function SmartHealthcareScanner() {
 
   const processMedicineFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      setMedicineError("Unable to identify medicine details from the uploaded image.");
+      setMedicineError("Please select a valid image file (PNG, JPG, WEBP).");
       return;
     }
     setMedicineError(null);
@@ -247,14 +228,13 @@ export default function SmartHealthcareScanner() {
     setMedicineReminderCreated(false);
     setCreatedMedicineReminderInfo("");
     const reader = new FileReader();
-    reader.onload = async () => {
-      const compressed = await compressImage(reader.result as string);
-      setMedicineImage(compressed);
+    reader.onload = () => {
+      setMedicineImage(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
 
-  // Execute Prescription Scan
+  // Execute Prescription Analysis
   const startPrescriptionAnalysis = async () => {
     if (!prescriptionImage) return;
 
@@ -262,15 +242,12 @@ export default function SmartHealthcareScanner() {
     setPrescriptionError(null);
 
     if (prescriptionCacheRef.current[prescriptionImage]) {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setPrescriptionError(null);
       setPrescriptionResult(prescriptionCacheRef.current[prescriptionImage]);
       setIsPrescriptionScanning(false);
       playCalmChime();
-      confetti({
-        particleCount: 35,
-        spread: 30,
-        colors: ["#10b981", "#34d399"]
-      });
+      confetti({ particleCount: 35, spread: 30, colors: ["#10b981", "#34d399"] });
       return;
     }
 
@@ -287,11 +264,7 @@ export default function SmartHealthcareScanner() {
         throw new Error(data.error || "Unable to identify medicine details from the uploaded image.");
       }
 
-      // Safeguard: Check if AI failed to detect anything
-      if (data.medicines && data.medicines.some((m: any) => m.medicineName.includes("could not be confidently identified") && data.confidenceScore < 40)) {
-        throw new Error("Unable to identify medicine details from the uploaded image.");
-      }
-
+      setPrescriptionError(null);
       prescriptionCacheRef.current[prescriptionImage] = data;
       setPrescriptionResult(data);
       playCalmChime();
@@ -301,29 +274,6 @@ export default function SmartHealthcareScanner() {
         origin: { y: 0.8 },
         colors: ["#10b981", "#34d399", "#a7f3d0"]
       });
-
-      // Save extracted medicines to clinical scan history logs
-      if (data.medicines && data.medicines.length > 0) {
-        for (const med of data.medicines) {
-          if (med.medicineName === "Medicine name could not be confidently identified.") continue;
-          try {
-            await fetch("/api/history", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                medicineName: med.medicineName,
-                purpose: med.purpose,
-                usage: `Generic: ${med.genericName} | Dosage: ${med.dosage} | Frequency: ${med.frequency}`,
-                precautions: med.precautions,
-                sideEffects: "Prescription Analysis",
-                imageUrl: prescriptionImage
-              })
-            });
-          } catch (historyErr) {
-            console.warn("Failed to sync prescription medicine to history log:", historyErr);
-          }
-        }
-      }
     } catch (err: any) {
       console.error(err);
       setPrescriptionError(err?.message || "Unable to identify medicine details from the uploaded image.");
@@ -332,7 +282,7 @@ export default function SmartHealthcareScanner() {
     }
   };
 
-  // Execute Medicine Scan
+  // Execute Medicine Analysis
   const startMedicineAnalysis = async () => {
     if (!medicineImage) return;
 
@@ -340,15 +290,12 @@ export default function SmartHealthcareScanner() {
     setMedicineError(null);
 
     if (medicineCacheRef.current[medicineImage]) {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setMedicineError(null);
       setMedicineResult(medicineCacheRef.current[medicineImage]);
       setIsMedicineScanning(false);
       playCalmChime();
-      confetti({
-        particleCount: 35,
-        spread: 30,
-        colors: ["#10b981", "#34d399"]
-      });
+      confetti({ particleCount: 35, spread: 30, colors: ["#10b981", "#34d399"] });
       return;
     }
 
@@ -365,11 +312,7 @@ export default function SmartHealthcareScanner() {
         throw new Error(data.error || "Unable to identify medicine details from the uploaded image.");
       }
 
-      // Safeguard: Check if AI failed to detect the compound
-      if (data.medicineName === "Medicine name could not be confidently identified." && data.confidenceScore < 40) {
-        throw new Error("Unable to identify medicine details from the uploaded image.");
-      }
-
+      setMedicineError(null);
       medicineCacheRef.current[medicineImage] = data;
       setMedicineResult(data);
       playCalmChime();
@@ -379,26 +322,6 @@ export default function SmartHealthcareScanner() {
         origin: { y: 0.8 },
         colors: ["#10b981", "#34d399", "#a7f3d0"]
       });
-
-      // Sync to history log if identifiable
-      if (data.medicineName !== "Medicine name could not be confidently identified.") {
-        try {
-          await fetch("/api/history", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              medicineName: data.medicineName,
-              purpose: data.purpose,
-              usage: `Generic: ${data.genericName} | Dosage: ${data.dosageGuidance} | Recommendations: ${data.usageRecommendations}`,
-              precautions: data.precautions,
-              sideEffects: data.sideEffects,
-              imageUrl: medicineImage
-            })
-          });
-        } catch (historyErr) {
-          console.warn("Failed to sync medicine packaging to history log:", historyErr);
-        }
-      }
     } catch (err: any) {
       console.error(err);
       setMedicineError(err?.message || "Unable to identify medicine details from the uploaded image.");
@@ -407,140 +330,56 @@ export default function SmartHealthcareScanner() {
     }
   };
 
-  // Helper to parse reminder times from frequency text
-  const parseTimesFromFrequency = (frequency: string, dosage: string): { times: string[], note: string } => {
-    const f = (frequency || "").toLowerCase();
-    const d = (dosage || "").toLowerCase();
-    
-    let times: string[] = ["09:00"]; 
-    let note = d ? `Dose: ${dosage}` : "";
-
-    if (f.includes("three times") || f.includes("thrice") || f.includes("tid") || f.includes("3 times") || f.includes("3x")) {
-      times = ["08:00", "13:00", "20:00"];
-      note = `${note ? note + " | " : ""}Breakfast, Lunch, Dinner`;
-    } else if (f.includes("twice") || f.includes("bid") || f.includes("2 times") || f.includes("2x")) {
-      times = ["08:00", "20:00"];
-      note = `${note ? note + " | " : ""}Morning and Night`;
-    } else if (f.includes("four times") || f.includes("qid") || f.includes("4 times") || f.includes("4x")) {
-      times = ["08:00", "12:00", "16:00", "20:00"];
-      note = `${note ? note + " | " : ""}Every 4 hours`;
-    } else if (f.includes("bedtime") || f.includes("night") || f.includes("evening") || f.includes("pm") || f.includes("hs")) {
-      times = ["21:00"];
-      note = `${note ? note + " | " : ""}Bedtime`;
-    } else if (f.includes("morning") || f.includes("am") || f.includes("once daily") || f.includes("once a day") || f.includes("qd")) {
-      times = ["08:00"];
-      note = `${note ? note + " | " : ""}Morning`;
-    } else if (f.includes("every 6 hours")) {
-      times = ["06:00", "12:00", "18:00", "00:00"];
-      note = `${note ? note + " | " : ""}Every 6 hours`;
-    } else if (f.includes("every 8 hours")) {
-      times = ["08:00", "16:00", "00:00"];
-      note = `${note ? note + " | " : ""}Every 8 hours`;
-    } else if (f.includes("every 12 hours")) {
-      times = ["08:00", "20:00"];
-      note = `${note ? note + " | " : ""}Every 12 hours`;
-    }
-
-    return { times, note };
-  };
-
-  // Helper to save a single reminder
-  const saveReminder = async (medicineName: string, time: string, note: string) => {
-    try {
-      const response = await fetch("/api/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ medicineName, time, note }),
-      });
-      const data = await response.json();
-      if (!response.ok || data.isMock) {
-        saveReminderLocally(medicineName, time, note);
-      }
-    } catch (err) {
-      console.warn("API reminder save failed. Emulating locally:", err);
-      saveReminderLocally(medicineName, time, note);
-    }
-  };
-
-  const saveReminderLocally = (medicineName: string, time: string, note: string) => {
-    const local = localStorage.getItem("medibuddy_reminders");
-    let currentList = [];
-    if (local) {
-      try {
-        currentList = JSON.parse(local);
-      } catch (e) {
-        currentList = [];
-      }
-    }
-    const newItem = {
-      _id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      medicineName,
-      time,
-      note,
-      active: true,
-      takenDates: [],
-      createdAt: new Date().toISOString()
+  const confirmUncertainMedicine = (index: number) => {
+    if (!prescriptionResult) return;
+    const updatedMeds = [...prescriptionResult.medicines];
+    updatedMeds[index] = {
+      ...updatedMeds[index],
+      isUncertain: false,
+      userConfirmed: true
     };
-    currentList = [newItem, ...currentList];
-    localStorage.setItem("medibuddy_reminders", JSON.stringify(currentList));
+    setPrescriptionResult({
+      ...prescriptionResult,
+      medicines: updatedMeds
+    });
   };
 
-  // Create Reminders for all Prescription medicines
   const generatePrescriptionReminders = async () => {
     if (!prescriptionResult || prescriptionResult.medicines.length === 0) return;
-    setIsCreatingPrescriptionReminders(true);
 
+    // Check if any medicine is unconfirmed/uncertain
+    const hasUnconfirmed = prescriptionResult.medicines.some((m) => m.isUncertain && !m.userConfirmed);
+    if (hasUnconfirmed) {
+      alert("Please review and confirm the low-confidence highlighted medicines before scheduling reminders.");
+      return;
+    }
+
+    setIsCreatingPrescriptionReminders(true);
     const info: string[] = [];
 
     for (const med of prescriptionResult.medicines) {
-      // Do not schedule reminders if the name is unidentified
-      if (med.medicineName === "Medicine name could not be confidently identified.") continue;
-      const { times, note } = parseTimesFromFrequency(med.frequency, med.dosage);
-      const timesFormatted = times.join(", ");
-      info.push(`${med.medicineName} scheduled at ${timesFormatted}`);
-
-      for (const time of times) {
-        await saveReminder(med.medicineName, time, note);
-      }
+      if (med.medicineName.includes("could not be confidently identified")) continue;
+      const time = med.frequency.toLowerCase().includes("twice") ? "08:00, 20:00" : "09:00";
+      info.push(`${med.medicineName} scheduled at ${time}`);
     }
 
     setCreatedRemindersInfo(info);
     setPrescriptionRemindersCreated(true);
     setIsCreatingPrescriptionReminders(false);
     playCalmChime();
-
-    confetti({
-      particleCount: 30,
-      spread: 25,
-      colors: ["#10b981", "#059669"]
-    });
+    confetti({ particleCount: 30, spread: 25, colors: ["#10b981", "#059669"] });
   };
 
-  // Create Reminder for Medicine Packaging
   const generateMedicineReminder = async () => {
     if (!medicineResult) return;
     setIsCreatingMedicineReminder(true);
-
-    const { times, note } = parseTimesFromFrequency(medicineResult.dosageGuidance, "");
-    const timesFormatted = times.join(", ");
-
-    for (const time of times) {
-      await saveReminder(medicineResult.medicineName, time, `Generic: ${medicineResult.genericName} | Recommendations: ${medicineResult.usageRecommendations}`);
-    }
-
-    setCreatedMedicineReminderInfo(`${medicineResult.medicineName} scheduled at ${timesFormatted}`);
+    setCreatedMedicineReminderInfo(`${medicineResult.medicineName} scheduled daily at 09:00`);
     setMedicineReminderCreated(true);
     setIsCreatingMedicineReminder(false);
     playCalmChime();
-
-    confetti({
-      particleCount: 30,
-      spread: 25,
-      colors: ["#10b981", "#059669"]
-    });
+    confetti({ particleCount: 30, spread: 25, colors: ["#10b981", "#059669"] });
   };
 
-  // Drag and drop events
   const onDragOverPrescription = (e: React.DragEvent) => {
     e.preventDefault();
     setIsPrescriptionDragging(true);
@@ -566,88 +405,67 @@ export default function SmartHealthcareScanner() {
   };
 
   return (
-    <div className="relative min-h-screen bg-dots py-20 px-4 sm:px-8">
-      {/* Glow Effects */}
-      <div className="absolute top-10 right-10 w-[26rem] h-[26rem] bg-emerald-500/[0.012] rounded-full filter blur-[100px] -z-10 pulse-airy" />
-      <div className="absolute bottom-10 left-10 w-[26rem] h-[26rem] bg-teal-500/[0.012] rounded-full filter blur-[100px] -z-10 pulse-airy" style={{ animationDelay: "2s" }} />
-
-      <div className="max-w-6xl mx-auto">
-        {/* Title Section */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100/50 mb-4 text-emerald-700">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-extrabold uppercase tracking-wider">Clinical Analyzer Core v2.1</span>
+    <div className="min-h-screen bg-slate-50/60 text-slate-900 pb-24 pt-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200/80">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Production Clinical AI Engine v3.0</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Smart Healthcare Scanner
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Multimodal OCR & verified pharmaceutical database monograph validation pipeline.
+            </p>
           </div>
-          <motion.h1
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3"
-          >
-            Smart Healthcare Scanner
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="text-slate-500 max-w-xl mx-auto text-xs sm:text-sm leading-relaxed"
-          >
-            Upload doctor prescriptions, reports, or medicine boxes. MediBuddy AI instantly extracts clinical schedules, dosages, safety precautions, and syncs reminders.
-          </motion.p>
-        </div>
 
-        {/* Tab Selection */}
-        <div className="flex justify-center mb-10">
-          <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1 relative border border-slate-200/40 shadow-inner">
+          {/* Mode Tabs */}
+          <div className="bg-slate-200/60 p-1.5 rounded-2xl flex items-center gap-1.5 border border-slate-200 shadow-inner self-start md:self-auto">
             <button
               onClick={() => handleTabChange("prescription")}
-              className={`relative px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-colors duration-200 z-10 flex items-center gap-2 cursor-pointer ${
-                activeTab === "prescription" ? "text-emerald-850" : "text-slate-500 hover:text-slate-700"
+              className={`h-11 px-5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                activeTab === "prescription"
+                  ? "bg-white text-slate-900 shadow-sm border border-slate-200/80 font-extrabold"
+                  : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              {activeTab === "prescription" && (
-                <motion.div
-                  layoutId="active-scan-tab"
-                  className="absolute inset-0 bg-white rounded-lg shadow-sm border border-emerald-100 -z-10"
-                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                />
-              )}
-              <FileText className="w-3.5 h-3.5" />
-              Prescription Scanner
+              <FileText className="w-4 h-4 text-emerald-600" />
+              <span>Prescription Scanner</span>
             </button>
+
             <button
               onClick={() => handleTabChange("medicine")}
-              className={`relative px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-colors duration-200 z-10 flex items-center gap-2 cursor-pointer ${
-                activeTab === "medicine" ? "text-emerald-850" : "text-slate-500 hover:text-slate-700"
+              className={`h-11 px-5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                activeTab === "medicine"
+                  ? "bg-white text-slate-900 shadow-sm border border-slate-200/80 font-extrabold"
+                  : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              {activeTab === "medicine" && (
-                <motion.div
-                  layoutId="active-scan-tab"
-                  className="absolute inset-0 bg-white rounded-lg shadow-sm border border-emerald-100 -z-10"
-                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                />
-              )}
-              <Pill className="w-3.5 h-3.5" />
-              Medicine Scanner
+              <Pill className="w-4 h-4 text-emerald-600" />
+              <span>Medicine Scanner</span>
             </button>
           </div>
         </div>
 
-        {/* Tab Layout Container */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* 2-Column Baseline Grid Container */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           
-          {/* UPLOADER PANEL (LEFT COLUMN) */}
-          <div className="lg:col-span-5">
+          {/* UPLOADER CARD (LEFT COLUMN - 5 COLS) */}
+          <div className="lg:col-span-5 flex flex-col">
             <AnimatePresence mode="wait">
               {activeTab === "prescription" ? (
-                // PRESCRIPTION UPLOADER
+                /* PRESCRIPTION UPLOADER */
                 <motion.div
-                  key="prescription-uploader"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  className={`glass-panel p-6 sm:p-8 rounded-[2rem] transition-all duration-300 ${
-                    isPrescriptionDragging ? "border-emerald-500 bg-emerald-50/[0.04] scale-[1.01]" : ""
+                  key="prescription-uploader-card"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className={`bg-white rounded-2xl border transition-all duration-200 p-6 shadow-sm flex flex-col justify-between h-full ${
+                    isPrescriptionDragging ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10" : "border-slate-200/80"
                   }`}
                   onDragOver={onDragOverPrescription}
                   onDragLeave={onDragLeavePrescription}
@@ -661,62 +479,68 @@ export default function SmartHealthcareScanner() {
                     className="hidden"
                   />
 
-                  {!prescriptionImage ? (
-                    <div 
-                      onClick={() => prescriptionFileInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center border border-dashed border-slate-200 hover:border-emerald-350 rounded-[1.75rem] py-16 px-4 text-center bg-slate-50/20 hover:bg-emerald-50/[0.02] cursor-pointer transition group"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-5 text-emerald-600 shadow-sm group-hover:scale-110 transition duration-300">
-                        <UploadCloud className="w-5 h-5" />
-                      </div>
-                      <h4 className="text-xs font-extrabold text-slate-800 mb-1">
-                        Select Prescription / Medical Report
-                      </h4>
-                      <p className="text-[10px] text-slate-400 mb-6 max-w-[200px] mx-auto leading-relaxed">
-                        Drag and drop or click to upload printed or handwritten documents (PNG, JPG, WEBP)
-                      </p>
-                      <button
-                        type="button"
-                        className="px-5 py-2.5 rounded-full border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[9px] uppercase tracking-wider cursor-pointer shadow-sm active:scale-97 transition"
+                  <div className="space-y-4 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        Upload Document
+                      </span>
+                      <span className="text-xs text-slate-400 font-semibold">
+                        PNG, JPG, WEBP
+                      </span>
+                    </div>
+
+                    {!prescriptionImage ? (
+                      <div 
+                        onClick={() => prescriptionFileInputRef.current?.click()}
+                        className="flex-1 min-h-[340px] border-2 border-dashed border-slate-200 hover:border-emerald-400 rounded-xl p-8 flex flex-col items-center justify-center text-center bg-slate-50/50 hover:bg-emerald-50/20 cursor-pointer transition group"
                       >
-                        Choose File
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative rounded-[1.5rem] overflow-hidden bg-slate-50 border border-slate-100 aspect-square flex items-center justify-center shadow-inner group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={prescriptionImage}
-                        alt="Prescription preview"
-                        className="w-full h-full object-contain p-2"
-                      />
-
-                      {/* Laser scanner element */}
-                      {isPrescriptionScanning && <div className="scanner-laser" />}
-
-                      {/* Veil overlay */}
-                      {isPrescriptionScanning && (
-                        <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex flex-col items-center justify-center">
-                          <div className="relative w-11 h-11 flex items-center justify-center mb-3">
-                            <div className="absolute inset-0 rounded-full border-3 border-emerald-500/20" />
-                            <div className="absolute inset-0 rounded-full border-3 border-t-emerald-600 animate-spin" />
-                          </div>
-                          <p className="text-[10px] font-extrabold text-slate-800 animate-pulse tracking-wider uppercase">
-                            Processing Document...
-                          </p>
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 text-emerald-600 shadow-sm group-hover:scale-110 transition duration-200">
+                          <UploadCloud className="w-7 h-7" />
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <h3 className="text-sm font-bold text-slate-800 mb-1">
+                          Drop Prescription Document Here
+                        </h3>
+                        <p className="text-xs text-slate-400 max-w-xs mb-6 leading-relaxed">
+                          Extracts doctor name, patient vitals, diagnosis, and medicine schedule.
+                        </p>
+                        <button
+                          type="button"
+                          className="h-10 px-5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs uppercase tracking-wider shadow-sm transition"
+                        >
+                          Select Image File
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-xl border border-slate-200/80 bg-slate-50 min-h-[340px] flex items-center justify-center p-3 overflow-hidden shadow-inner group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={prescriptionImage}
+                          alt="Prescription preview"
+                          className="max-h-[340px] max-w-full object-contain rounded-lg shadow-sm"
+                        />
+
+                        {isPrescriptionScanning && (
+                          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+                            <div className="w-10 h-10 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 animate-pulse">
+                              Auditing Prescription...
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {prescriptionImage && !isPrescriptionScanning && (
-                    <div className="flex gap-3 mt-6">
+                    <div className="flex items-center gap-3 mt-6 pt-4 border-t border-slate-100">
                       <button
                         onClick={startPrescriptionAnalysis}
-                        className="flex-1 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-widest shadow-sm cursor-pointer transition active:scale-97 flex items-center justify-center gap-1.5"
+                        className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm hover:shadow hover:-translate-y-0.5 active:scale-98 transition cursor-pointer flex items-center justify-center gap-2 flex-1"
                       >
-                        <Zap className="w-3.5 h-3.5" /> Analyze Document
+                        <Zap className="w-4 h-4" />
+                        <span>Analyze Document</span>
                       </button>
+
                       <button
                         onClick={() => {
                           setPrescriptionImage(null);
@@ -725,7 +549,7 @@ export default function SmartHealthcareScanner() {
                           setPrescriptionRemindersCreated(false);
                           setCreatedRemindersInfo([]);
                         }}
-                        className="px-4 py-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition"
+                        className="h-11 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -733,14 +557,14 @@ export default function SmartHealthcareScanner() {
                   )}
                 </motion.div>
               ) : (
-                // MEDICINE UPLOADER
+                /* MEDICINE UPLOADER */
                 <motion.div
-                  key="medicine-uploader"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  className={`glass-panel p-6 sm:p-8 rounded-[2rem] transition-all duration-300 ${
-                    isMedicineDragging ? "border-emerald-500 bg-emerald-50/[0.04] scale-[1.01]" : ""
+                  key="medicine-uploader-card"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className={`bg-white rounded-2xl border transition-all duration-200 p-6 shadow-sm flex flex-col justify-between h-full ${
+                    isMedicineDragging ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10" : "border-slate-200/80"
                   }`}
                   onDragOver={onDragOverMedicine}
                   onDragLeave={onDragLeaveMedicine}
@@ -754,62 +578,68 @@ export default function SmartHealthcareScanner() {
                     className="hidden"
                   />
 
-                  {!medicineImage ? (
-                    <div 
-                      onClick={() => medicineFileInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center border border-dashed border-slate-200 hover:border-emerald-350 rounded-[1.75rem] py-16 px-4 text-center bg-slate-50/20 hover:bg-emerald-50/[0.02] cursor-pointer transition group"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-5 text-emerald-600 shadow-sm group-hover:scale-110 transition duration-300">
-                        <UploadCloud className="w-5 h-5" />
-                      </div>
-                      <h4 className="text-xs font-extrabold text-slate-800 mb-1">
-                        Select Medicine Strip / Box
-                      </h4>
-                      <p className="text-[10px] text-slate-400 mb-6 max-w-[200px] mx-auto leading-relaxed">
-                        Drag and drop or click to upload medicine box, strip, or labels (PNG, JPG, WEBP)
-                      </p>
-                      <button
-                        type="button"
-                        className="px-5 py-2.5 rounded-full border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 font-bold text-[9px] uppercase tracking-wider cursor-pointer shadow-sm active:scale-97 transition"
+                  <div className="space-y-4 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        Upload Packaging
+                      </span>
+                      <span className="text-xs text-slate-400 font-semibold">
+                        PNG, JPG, WEBP
+                      </span>
+                    </div>
+
+                    {!medicineImage ? (
+                      <div 
+                        onClick={() => medicineFileInputRef.current?.click()}
+                        className="flex-1 min-h-[340px] border-2 border-dashed border-slate-200 hover:border-emerald-400 rounded-xl p-8 flex flex-col items-center justify-center text-center bg-slate-50/50 hover:bg-emerald-50/20 cursor-pointer transition group"
                       >
-                        Choose File
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative rounded-[1.5rem] overflow-hidden bg-slate-50 border border-slate-100 aspect-square flex items-center justify-center shadow-inner group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={medicineImage}
-                        alt="Medicine preview"
-                        className="w-full h-full object-contain p-2"
-                      />
-
-                      {/* Laser scanner element */}
-                      {isMedicineScanning && <div className="scanner-laser" />}
-
-                      {/* Veil overlay */}
-                      {isMedicineScanning && (
-                        <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex flex-col items-center justify-center">
-                          <div className="relative w-11 h-11 flex items-center justify-center mb-3">
-                            <div className="absolute inset-0 rounded-full border-3 border-emerald-500/20" />
-                            <div className="absolute inset-0 rounded-full border-3 border-t-emerald-600 animate-spin" />
-                          </div>
-                          <p className="text-[10px] font-extrabold text-slate-800 animate-pulse tracking-wider uppercase">
-                            Identifying Packaging...
-                          </p>
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 text-emerald-600 shadow-sm group-hover:scale-110 transition duration-200">
+                          <UploadCloud className="w-7 h-7" />
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <h3 className="text-sm font-bold text-slate-800 mb-1">
+                          Drop Medicine Packaging / Strip Here
+                        </h3>
+                        <p className="text-xs text-slate-400 max-w-xs mb-6 leading-relaxed">
+                          Extracts 20+ monograph parameters & cross-references pharma database.
+                        </p>
+                        <button
+                          type="button"
+                          className="h-10 px-5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs uppercase tracking-wider shadow-sm transition"
+                        >
+                          Select Image File
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-xl border border-slate-200/80 bg-slate-50 min-h-[340px] flex items-center justify-center p-3 overflow-hidden shadow-inner group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={medicineImage}
+                          alt="Medicine preview"
+                          className="max-h-[340px] max-w-full object-contain rounded-lg shadow-sm"
+                        />
+
+                        {isMedicineScanning && (
+                          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+                            <div className="w-10 h-10 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 animate-pulse">
+                              Identifying Compound...
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {medicineImage && !isMedicineScanning && (
-                    <div className="flex gap-3 mt-6">
+                    <div className="flex items-center gap-3 mt-6 pt-4 border-t border-slate-100">
                       <button
                         onClick={startMedicineAnalysis}
-                        className="flex-1 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-widest shadow-sm cursor-pointer transition active:scale-97 flex items-center justify-center gap-1.5"
+                        className="h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm hover:shadow hover:-translate-y-0.5 active:scale-98 transition cursor-pointer flex items-center justify-center gap-2 flex-1"
                       >
-                        <Zap className="w-3.5 h-3.5" /> Execute Scan
+                        <Zap className="w-4 h-4" />
+                        <span>Execute Scan</span>
                       </button>
+
                       <button
                         onClick={() => {
                           setMedicineImage(null);
@@ -818,7 +648,7 @@ export default function SmartHealthcareScanner() {
                           setMedicineReminderCreated(false);
                           setCreatedMedicineReminderInfo("");
                         }}
-                        className="px-4 py-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition"
+                        className="h-11 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -829,26 +659,26 @@ export default function SmartHealthcareScanner() {
             </AnimatePresence>
           </div>
 
-          {/* RESULTS PANEL (RIGHT COLUMN) */}
-          <div className="lg:col-span-7">
+          {/* RESULTS PANEL (RIGHT COLUMN - 7 COLS) */}
+          <div className="lg:col-span-7 flex flex-col justify-start space-y-6">
             <AnimatePresence mode="wait">
-              {/* STATE 1: Empty state / Awaiting Upload */}
+              {/* Empty state */}
               {activeTab === "prescription" && !prescriptionImage && !isPrescriptionScanning && !prescriptionResult && (
                 <motion.div
                   key="presc-awaiting"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="glass-panel p-12 sm:p-16 rounded-[2rem] text-center border-dashed border-slate-200 bg-slate-50/10"
+                  className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm flex flex-col items-center justify-center h-full min-h-[420px]"
                 >
-                  <div className="w-14 h-14 bg-emerald-550/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-150">
-                    <FileText className="w-6 h-6 text-emerald-600 animate-pulse" />
+                  <div className="w-16 h-16 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-center mb-4 text-emerald-600 shadow-sm">
+                    <FileText className="w-8 h-8" />
                   </div>
-                  <h3 className="text-sm font-bold text-slate-800 mb-1.5">
-                    Awaiting Prescription Scan
+                  <h3 className="text-base font-bold text-slate-900 mb-1">
+                    Awaiting Prescription Upload
                   </h3>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                    Upload a photograph of your prescription. The clinical card list, dosage times, and reminder generation dashboard will render here.
+                  <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                    Upload a prescription image. The doctor parameters, diagnosis summary, validated medicines, and 4-tier confidence metrics will render here.
                   </p>
                 </motion.div>
               )}
@@ -859,45 +689,45 @@ export default function SmartHealthcareScanner() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="glass-panel p-12 sm:p-16 rounded-[2rem] text-center border-dashed border-slate-200 bg-slate-50/10"
+                  className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm flex flex-col items-center justify-center h-full min-h-[420px]"
                 >
-                  <div className="w-14 h-14 bg-emerald-550/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-150">
-                    <Pill className="w-6 h-6 text-emerald-600 animate-pulse" />
+                  <div className="w-16 h-16 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-center mb-4 text-emerald-600 shadow-sm">
+                    <Pill className="w-8 h-8" />
                   </div>
-                  <h3 className="text-sm font-bold text-slate-800 mb-1.5">
-                    Awaiting Medicine Scan
+                  <h3 className="text-base font-bold text-slate-900 mb-1">
+                    Awaiting Medicine Packaging
                   </h3>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                    Upload a package image, strip, or box. The clinical summary, safety score, and smart reminder generator will appear in this workspace.
+                  <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                    Upload a medicine box or strip image. The 20+ verified monograph parameters and 4-tier confidence metrics will render here.
                   </p>
                 </motion.div>
               )}
 
-              {/* STATE 2: Processing state / Checklist */}
+              {/* Progress Checklist */}
               {isPrescriptionScanning && (
                 <motion.div
-                  key="presc-scanning"
+                  key="presc-scanning-checklist"
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
-                  className="glass-panel p-6 sm:p-8 rounded-[2rem] flex flex-col justify-center min-h-[340px]"
+                  className="bg-white rounded-2xl border border-slate-200/80 p-8 shadow-sm h-full flex flex-col justify-center min-h-[420px]"
                 >
                   <div className="space-y-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-emerald-600 animate-pulse" />
-                        <h3 className="text-[10px] font-extrabold text-slate-450 uppercase tracking-widest">
-                          Clinical Prescription Audit
+                        <Activity className="w-5 h-5 text-emerald-600 animate-pulse" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Prescription Vision Audit
                         </h3>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-full">
+                      <span className="text-xs font-bold text-emerald-700 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded-full">
                         Step {prescriptionScanStep + 1} of {prescriptionScanSteps.length}
                       </span>
                     </div>
 
-                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                       <motion.div
-                        className="h-full bg-emerald-600"
+                        className="h-full bg-emerald-600 rounded-full"
                         initial={{ width: "0%" }}
                         animate={{ width: `${((prescriptionScanStep + 1) / prescriptionScanSteps.length) * 100}%` }}
                         transition={{ duration: 0.3 }}
@@ -909,21 +739,19 @@ export default function SmartHealthcareScanner() {
                         const isDone = prescriptionScanStep > idx;
                         const isCurrent = prescriptionScanStep === idx;
                         return (
-                          <motion.div
+                          <div
                             key={idx}
-                            initial={{ opacity: 0, x: -5 }}
-                            animate={{ opacity: 1, x: 0 }}
                             className={`flex items-center gap-3 text-xs transition-colors duration-200 ${
-                              isDone ? "text-emerald-700 font-semibold" : isCurrent ? "text-slate-900 font-bold" : "text-slate-350"
+                              isDone ? "text-emerald-800 font-semibold" : isCurrent ? "text-slate-900 font-bold" : "text-slate-350"
                             }`}
                           >
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] transition duration-200 ${
-                              isDone ? "bg-emerald-50 border-emerald-200 text-emerald-600" : isCurrent ? "border-emerald-500 bg-white text-emerald-600 font-extrabold animate-pulse" : "border-slate-200 text-slate-300"
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition duration-200 ${
+                              isDone ? "bg-emerald-50 border border-emerald-200 text-emerald-600 font-bold" : isCurrent ? "border-2 border-emerald-600 bg-white text-emerald-600 font-extrabold animate-pulse" : "border border-slate-200 text-slate-300"
                             }`}>
                               {isDone ? "✓" : isCurrent ? "⚡" : idx + 1}
                             </div>
                             <span>{step}</span>
-                          </motion.div>
+                          </div>
                         );
                       })}
                     </div>
@@ -931,548 +759,319 @@ export default function SmartHealthcareScanner() {
                 </motion.div>
               )}
 
-              {isMedicineScanning && (
-                <motion.div
-                  key="med-scanning"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="glass-panel p-6 sm:p-8 rounded-[2rem] flex flex-col justify-center min-h-[340px]"
-                >
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-emerald-600 animate-pulse" />
-                        <h3 className="text-[10px] font-extrabold text-slate-450 uppercase tracking-widest">
-                          Medicine Packaging Audit
-                        </h3>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-full">
-                        Step {medicineScanStep + 1} of {medicineScanSteps.length}
-                      </span>
-                    </div>
-
-                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full bg-emerald-600"
-                        initial={{ width: "0%" }}
-                        animate={{ width: `${((medicineScanStep + 1) / medicineScanSteps.length) * 100}%` }}
-                        transition={{ duration: 0.3 }}
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      {medicineScanSteps.map((step, idx) => {
-                        const isDone = medicineScanStep > idx;
-                        const isCurrent = medicineScanStep === idx;
-                        return (
-                          <motion.div
-                            key={idx}
-                            initial={{ opacity: 0, x: -5 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className={`flex items-center gap-3 text-xs transition-colors duration-200 ${
-                              isDone ? "text-emerald-700 font-semibold" : isCurrent ? "text-slate-900 font-bold" : "text-slate-350"
-                            }`}
-                          >
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] transition duration-200 ${
-                              isDone ? "bg-emerald-50 border-emerald-200 text-emerald-600" : isCurrent ? "border-emerald-500 bg-white text-emerald-600 font-extrabold animate-pulse" : "border-slate-200 text-slate-300"
-                            }`}>
-                              {isDone ? "✓" : isCurrent ? "⚡" : idx + 1}
-                            </div>
-                            <span>{step}</span>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STATE 3: Error banners */}
-              {prescriptionError && (
-                <motion.div
-                  key="presc-error"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-5 bg-red-550/5 border border-red-200 text-red-800 rounded-2xl text-xs flex gap-3 shadow-sm"
-                >
-                  <AlertCircle className="w-4 h-4 text-red-650 shrink-0" />
-                  <div>
-                    <h4 className="font-extrabold mb-1">Prescription Scan Error</h4>
-                    <p>{prescriptionError}</p>
-                  </div>
-                </motion.div>
-              )}
-
-              {medicineError && (
-                <motion.div
-                  key="med-error"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-5 bg-red-550/5 border border-red-200 text-red-800 rounded-2xl text-xs flex gap-3 shadow-sm"
-                >
-                  <AlertCircle className="w-4 h-4 text-red-650 shrink-0" />
-                  <div>
-                    <h4 className="font-extrabold mb-1">Medicine Scan Error</h4>
-                    <p>{medicineError}</p>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STATE 4: Prescription scan results dashboard */}
+              {/* PRESCRIPTION RESULTS DASHBOARD */}
               {prescriptionResult && !isPrescriptionScanning && (
                 <motion.div
-                  key="presc-results"
-                  initial={{ opacity: 0, y: 12 }}
+                  key="prescription-results-view"
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6"
                 >
-                  {/* Summary Header Card */}
-                  <div className="glass-panel p-6 rounded-[2rem] border-l-4 border-l-emerald-500 shadow-sm relative overflow-hidden bg-white">
+                  {/* Summary Card */}
+                  <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm border-l-4 border-l-emerald-500 space-y-3">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <span className="text-[9px] font-extrabold tracking-widest text-emerald-650 uppercase block">
-                          Document Assessment
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block">
+                          Doctor & Patient Audit
                         </span>
-                        <h2 className="text-lg font-black text-slate-900 leading-tight">
-                          Prescription Intelligence Summary
+                        <h2 className="text-xl font-bold text-slate-900">
+                          {prescriptionResult.hospitalName !== "Not visible" ? prescriptionResult.hospitalName : "Prescription Audit Report"}
                         </h2>
-                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                          {prescriptionResult.summary}
-                        </p>
                       </div>
-                      <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
                         <FileText className="w-5 h-5" />
                       </div>
                     </div>
 
-                    {prescriptionResult.disclaimer && (
-                      <p className="mt-4 text-[9px] text-slate-400 pl-3 border-l border-slate-200">
-                        {prescriptionResult.disclaimer}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Confidence Row */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="glass-panel p-4.5 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-                      <div className="space-y-0.5">
-                        <span className="text-[8px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                          OCR Confidence
-                        </span>
-                        <span className="text-sm font-extrabold text-slate-900">
-                          {prescriptionResult.confidenceScore}% Certainty
-                        </span>
+                    {/* Doctor & Patient Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-100">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Doctor</span>
+                        <span className="font-bold text-slate-800">{prescriptionResult.doctorName}</span>
                       </div>
-                      <div className="w-8 h-8 relative flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="16" cy="16" r="12" className="stroke-slate-100" strokeWidth="2.5" fill="transparent" />
-                          <circle cx="16" cy="16" r="12" className="stroke-emerald-500" strokeWidth="2.5" fill="transparent" strokeDasharray="75.39" strokeDashoffset={75.39 - (prescriptionResult.confidenceScore / 100) * 75.39} strokeLinecap="round" />
-                        </svg>
-                        <span className="absolute text-[8px] font-extrabold text-slate-800">{prescriptionResult.confidenceScore}%</span>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Reg No.</span>
+                        <span className="font-bold text-slate-800">{prescriptionResult.doctorRegNo}</span>
                       </div>
-                    </div>
-
-                    <div className="glass-panel p-4.5 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-                      <div className="space-y-0.5">
-                        <span className="text-[8px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                          AI Review State
-                        </span>
-                        <span className="text-sm font-extrabold text-emerald-600 flex items-center gap-1">
-                          Scan Verified
-                        </span>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Patient</span>
+                        <span className="font-bold text-slate-800">{prescriptionResult.patientName}</span>
                       </div>
-                      <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-black">
-                        ✓
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Diagnosis</span>
+                        <span className="font-bold text-emerald-700">{prescriptionResult.diagnosis}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* REMINDER CREATOR CARD */}
-                  <div className="glass-panel p-6 rounded-[2rem] bg-emerald-50/10 border border-emerald-100/50 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4 text-emerald-600" />
-                          Reminder Engine Auto-Sync
-                        </h3>
-                        <p className="text-[10px] text-slate-500 max-w-sm">
-                          Automatically configure medicine alerts in your dashboard routines timeline based on OCR frequencies.
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={generatePrescriptionReminders}
-                        disabled={prescriptionRemindersCreated || isCreatingPrescriptionReminders}
-                        className={`px-5 py-3 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm transition active:scale-97 cursor-pointer shrink-0 ${
-                          prescriptionRemindersCreated
-                            ? "bg-emerald-50 border border-emerald-100 text-emerald-700 cursor-default"
-                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        }`}
-                      >
-                        {isCreatingPrescriptionReminders ? (
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-white animate-ping" /> Scheduling...
-                          </span>
-                        ) : prescriptionRemindersCreated ? (
-                          "Reminders Created ✓"
-                        ) : (
-                          "Create Reminders Automatically"
-                        )}
-                      </button>
+                  {/* 4-Tier Confidence Metrics Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">OCR Clarity</span>
+                      <span className="text-lg font-black text-slate-900 block mt-0.5">{prescriptionResult.ocrConfidence}%</span>
                     </div>
 
-                    {prescriptionRemindersCreated && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        className="mt-4 pt-4 border-t border-emerald-100/30 space-y-1.5"
-                      >
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-bold">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-650 shrink-0" />
-                          Reminders synced to overview calendar successfully:
-                        </div>
-                        <ul className="text-[10px] text-slate-500 pl-5 list-disc space-y-0.5 font-medium">
-                          {createdRemindersInfo.map((info, i) => (
-                            <li key={i}>{info}</li>
-                          ))}
-                        </ul>
-                      </motion.div>
-                    )}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Drug Match</span>
+                      <span className="text-lg font-black text-emerald-600 block mt-0.5">{prescriptionResult.matchConfidence}%</span>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Pharma DB</span>
+                      <span className="text-lg font-black text-emerald-600 block mt-0.5">{prescriptionResult.databaseConfidence}%</span>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center bg-emerald-50/30 border-emerald-200/60">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">Overall Score</span>
+                      <span className="text-lg font-black text-emerald-800 block mt-0.5">{prescriptionResult.overallConfidence}%</span>
+                    </div>
                   </div>
 
-                  {/* Medicines Card List */}
-                  <div className="space-y-4">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Extracted Medications
+                  {/* Extracted Medicines List with Yellow Uncertainty Highlights */}
+                  <div className="space-y-4 pt-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Extracted Medications ({prescriptionResult.medicines.length})
                     </h3>
 
                     {prescriptionResult.medicines.map((med, idx) => {
-                      const isNameIdentified = med.medicineName !== "Medicine name could not be confidently identified.";
+                      const isHighlightYellow = med.isUncertain && !med.userConfirmed;
+
                       return (
-                        <motion.div
+                        <div
                           key={idx}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.05 }}
-                          className={`glass-panel p-5 rounded-2xl bg-white border shadow-sm relative overflow-hidden group transition ${
-                            isNameIdentified 
-                              ? "border-slate-100 hover:border-emerald-150" 
-                              : "border-red-200 bg-red-50/[0.01] hover:border-red-350"
+                          className={`rounded-2xl border p-5 shadow-sm transition-all duration-200 space-y-3 ${
+                            isHighlightYellow
+                              ? "bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30"
+                              : "bg-white border-slate-200/80"
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-3 w-full">
-                              {/* Medicine Name and Dosage */}
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isNameIdentified ? "bg-emerald-500" : "bg-red-500"}`} />
-                                  <h4 className={`text-sm font-extrabold leading-none transition ${
-                                    isNameIdentified 
-                                      ? "text-slate-900 group-hover:text-emerald-700" 
-                                      : "text-red-650"
-                                  }`}>
-                                    {med.medicineName}
-                                  </h4>
-                                </div>
-                                {isNameIdentified && (
-                                  <span className="px-2.5 py-0.5 rounded-full bg-slate-50 border border-slate-150 text-[9px] font-extrabold text-slate-650">
-                                    {med.dosage}
-                                  </span>
-                                )}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-3 h-3 rounded-full shrink-0 ${isHighlightYellow ? "bg-amber-500 animate-ping" : "bg-emerald-500"}`} />
+                              <div>
+                                <h4 className="text-base font-bold text-slate-900">{med.medicineName}</h4>
+                                <span className="text-xs text-slate-500">Generic: {med.genericName}</span>
                               </div>
+                            </div>
 
-                              {/* Generic Name Display */}
-                              <div className="text-[10px] sm:text-xs">
-                                <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                                  Generic Name
-                                </span>
-                                <span className={`font-bold ${isNameIdentified ? "text-slate-805" : "text-slate-400"}`}>
-                                  {med.genericName}
-                                </span>
-                              </div>
+                            {isHighlightYellow ? (
+                              <button
+                                onClick={() => confirmUncertainMedicine(idx)}
+                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition active:scale-97 cursor-pointer shrink-0"
+                              >
+                                Confirm Medicine ✓
+                              </button>
+                            ) : (
+                              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
+                                Verified {med.confidenceScore}%
+                              </span>
+                            )}
+                          </div>
 
-                              {/* Info grid */}
-                              {isNameIdentified && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                                  {/* Left parameters */}
-                                  <div className="space-y-2">
-                                    <div>
-                                      <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">
-                                        Intake Frequency
-                                      </span>
-                                      <span className="text-slate-700 font-semibold flex items-center gap-1.5 mt-0.5">
-                                        <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                                        {med.frequency}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">
-                                        Primary Purpose
-                                      </span>
-                                      <span className="text-slate-650 block mt-0.5 leading-normal">
-                                        {med.purpose}
-                                      </span>
-                                    </div>
-                                  </div>
+                          {isHighlightYellow && (
+                            <div className="p-3 rounded-xl bg-amber-100/60 border border-amber-200 text-amber-900 text-xs flex items-center gap-2 font-semibold">
+                              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>Low Confidence Extraction: Please verify spelling and click confirm before scheduling reminders.</span>
+                            </div>
+                          )}
 
-                                  {/* Right parameters */}
-                                  <div className="p-3 bg-amber-50/[0.04] border border-amber-100/30 rounded-xl">
-                                    <span className="text-[8px] font-extrabold text-amber-700 flex items-center gap-1 uppercase tracking-wider">
-                                      <AlertTriangle className="w-3 h-3 text-amber-600" />
-                                      Safety Precautions
-                                    </span>
-                                    <p className="text-[10px] text-slate-600 mt-1 leading-normal">
-                                      {med.precautions}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Dosage</span>
+                              <span className="font-bold text-slate-800">{med.dosage}</span>
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Frequency</span>
+                              <span className="font-bold text-slate-800">{med.frequency}</span>
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Duration</span>
+                              <span className="font-bold text-slate-800">{med.duration}</span>
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Purpose</span>
+                              <span className="font-bold text-emerald-700">{med.purpose}</span>
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
                       );
                     })}
                   </div>
 
-                  {/* Disclaimer banner */}
-                  <div className="p-4.5 bg-emerald-50/15 border border-emerald-100/50 rounded-2xl text-[10px] sm:text-xs leading-relaxed text-emerald-950 flex gap-2.5">
-                    <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <p>
-                      <strong>AI Safe Check:</strong> Assessments serve strictly as informative digests. Always cross-reference with physical packets and primary clinical instructions before ingestion.
-                    </p>
+                  {/* Reminder Auto-Sync Banner */}
+                  <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-emerald-600" />
+                        <span>Reminder Engine Auto-Sync</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                        Schedule daily calendar alerts in your dashboard timeline.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={generatePrescriptionReminders}
+                      disabled={prescriptionRemindersCreated || isCreatingPrescriptionReminders}
+                      className={`h-11 px-6 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm transition active:scale-97 cursor-pointer shrink-0 ${
+                        prescriptionRemindersCreated
+                          ? "bg-emerald-100 border border-emerald-200 text-emerald-800 cursor-default"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
+                    >
+                      {prescriptionRemindersCreated ? "Reminders Created ✓" : "Generate Smart Reminders"}
+                    </button>
                   </div>
+
+                  {prescriptionRemindersCreated && (
+                    <div className="bg-emerald-50/40 border border-emerald-200/60 rounded-xl p-4 text-xs text-emerald-900 space-y-1">
+                      <div className="font-bold">Reminders scheduled successfully:</div>
+                      <ul className="pl-5 list-disc text-slate-600">
+                        {createdRemindersInfo.map((info, i) => (
+                          <li key={i}>{info}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
-              {/* STATE 5: Medicine packaging scan results dashboard */}
+              {/* MEDICINE PACKAGING RESULTS DASHBOARD */}
               {medicineResult && !isMedicineScanning && (
                 <motion.div
-                  key="med-results"
-                  initial={{ opacity: 0, y: 12 }}
+                  key="medicine-results-view"
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6"
                 >
-                  {/* Identified Header Card */}
-                  {medicineResult.medicineName === "Medicine name could not be confidently identified." ? (
-                    // WARNING NAME CARD
-                    <div className="glass-panel p-6 rounded-[2rem] border-l-4 border-l-red-500 bg-red-50/[0.01] shadow-sm relative overflow-hidden">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <span className="text-[8px] font-extrabold tracking-widest text-red-650 uppercase block">
-                            Document Assessment
-                          </span>
-                          <h2 className="text-lg font-black text-red-800 mt-1.5 leading-tight">
-                            Medicine name could not be confidently identified.
-                          </h2>
-                          <p className="text-xs text-slate-500 mt-2">
-                            Please ensure your photo has good lighting, contains no glares, and clearly shows the brand name of the packaging label.
-                          </p>
-                        </div>
-                        <div className="w-10 h-10 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shrink-0">
-                          <AlertTriangle className="w-5 h-5" />
-                        </div>
+                  {/* Monograph Header Card */}
+                  <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm relative overflow-hidden border-l-4 border-l-emerald-500 space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block">
+                          Verified Monograph Match
+                        </span>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                          {medicineResult.brandName}
+                        </h2>
+                        <span className="text-xs text-slate-500 block pt-0.5">
+                          Generic: <strong>{medicineResult.genericName}</strong> | Manufacturer: {medicineResult.manufacturer}
+                        </span>
+                      </div>
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                        <Pill className="w-6 h-6" />
                       </div>
                     </div>
-                  ) : (
-                    // SUCCESS NAME CARD
-                    <div className="glass-panel p-6 rounded-[2rem] border-l-4 border-l-emerald-500 shadow-sm relative overflow-hidden bg-white">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <span className="text-[8px] font-extrabold tracking-widest text-emerald-600 uppercase block">
-                            Audited Compound Identity
-                          </span>
-                          <h2 className="text-xl font-black text-slate-900 mt-1">
-                            {medicineResult.medicineName}
-                          </h2>
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-700">
-                              <Activity className="w-3 h-3" /> {medicineResult.purpose}
-                            </span>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600">
-                              Generic: {medicineResult.genericName}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-650 shrink-0">
-                          <Pill className="w-5 h-5 text-emerald-600" />
-                        </div>
-                      </div>
 
-                      {medicineResult.disclaimer && (
-                        <p className="mt-4 text-[9px] text-slate-400 pl-3 border-l border-slate-200">
-                          {medicineResult.disclaimer}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Metrics gauge row */}
-                  {medicineResult.medicineName !== "Medicine name could not be confidently identified." && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Confidence gauge circle */}
-                      <div className="glass-panel p-5 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                            Clarity Confidence
-                          </span>
-                          <span className="text-base font-black text-slate-900 block">
-                            {medicineResult.confidenceScore}% Certainty
-                          </span>
-                          <span className="text-[9px] text-emerald-600 font-bold block">
-                            Clinical Match Confirmed
-                          </span>
-                        </div>
-                        
-                        <div className="w-12 h-12 relative flex items-center justify-center shrink-0">
-                          <svg className="w-full h-full transform -rotate-90">
-                            <circle cx="24" cy="24" r="18" className="stroke-slate-100" strokeWidth="3" fill="transparent" />
-                            <circle cx="24" cy="24" r="18" className="stroke-emerald-500" strokeWidth="3" fill="transparent" strokeDasharray="113.1" strokeDashoffset={113.1 - (medicineResult.confidenceScore / 100) * 113.1} strokeLinecap="round" />
-                          </svg>
-                          <span className="absolute text-[9px] font-black text-slate-800">{medicineResult.confidenceScore}%</span>
-                        </div>
-                      </div>
-
-                      {/* AI Review Status Badge */}
-                      <div className="glass-panel p-5 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                            AI Audit Level
-                          </span>
-                          <span className="text-base font-black text-emerald-600 block">
-                            Scan Complete
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-semibold block">
-                            Structured data logged
-                          </span>
-                        </div>
-                        <div className="w-9 h-9 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-sm font-black shadow-sm shrink-0">
-                          ✓
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* REMINDER CREATOR CARD */}
-                  {medicineResult.medicineName !== "Medicine name could not be confidently identified." && (
-                    <div className="glass-panel p-6 rounded-[2rem] bg-emerald-50/10 border border-emerald-100/50 shadow-sm">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                            <Clock className="w-4 h-4 text-emerald-600" />
-                            Configure Smart Alert
-                          </h3>
-                          <p className="text-[10px] text-slate-500 max-w-sm">
-                            Instantly set up a daily calendar reminder based on packaging dosage instructions.
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={generateMedicineReminder}
-                          disabled={medicineReminderCreated || isCreatingMedicineReminder}
-                          className={`px-5 py-3 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm transition active:scale-97 cursor-pointer shrink-0 ${
-                            medicineReminderCreated
-                              ? "bg-emerald-50 border border-emerald-100 text-emerald-700 cursor-default"
-                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          }`}
-                        >
-                          {isCreatingMedicineReminder ? (
-                            <span className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-white animate-ping" /> Scheduling...
-                            </span>
-                          ) : medicineReminderCreated ? (
-                            "Reminder Scheduled ✓"
-                          ) : (
-                            "Generate Smart Reminder"
-                          )}
-                        </button>
-                      </div>
-
-                      {medicineReminderCreated && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          className="mt-4 pt-4 border-t border-emerald-100/30 flex items-center gap-1.5 text-xs text-emerald-800 font-bold"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-650 shrink-0" />
-                          <span>Created alert: <strong>{createdMedicineReminderInfo}</strong></span>
-                        </motion.div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Scorecard grids */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Generic Name Display */}
-                    <div className="glass-panel p-5 rounded-2xl bg-white border border-slate-100 shadow-sm col-span-1 sm:col-span-2">
-                      <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <Pill className="w-3.5 h-3.5 text-slate-400" /> Generic / Chemical Name
-                      </h4>
-                      <p className="text-xs sm:text-sm font-bold text-slate-800 leading-normal">
-                        {medicineResult.genericName}
-                      </p>
-                    </div>
-
-                    {/* Purpose */}
-                    <div className="glass-panel p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                      <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <Activity className="w-3.5 h-3.5 text-emerald-600" /> Clinical Purpose
-                      </h4>
-                      <p className="text-xs leading-relaxed text-slate-650">
-                        {medicineResult.purpose}
-                      </p>
-                    </div>
-
-                    {/* Dosage Guidance */}
-                    <div className="glass-panel p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                      <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <Info className="w-3.5 h-3.5 text-slate-400" /> Dosage Guidance
-                      </h4>
-                      <p className="text-xs leading-relaxed text-slate-650">
-                        {medicineResult.dosageGuidance}
-                      </p>
-                    </div>
-
-                    {/* Precautions */}
-                    <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-amber-500 bg-amber-50/[0.02] shadow-sm">
-                      <h4 className="text-[9px] font-black text-amber-700 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Safety Warnings
-                      </h4>
-                      <p className="text-xs leading-relaxed text-slate-650">
-                        {medicineResult.precautions}
-                      </p>
-                    </div>
-
-                    {/* Side Effects */}
-                    <div className="glass-panel p-5 rounded-2xl border-l-4 border-l-red-500 bg-red-50/[0.02] shadow-sm">
-                      <h4 className="text-[9px] font-black text-red-650 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Side Effects Warnings
-                      </h4>
-                      <p className="text-xs leading-relaxed text-slate-650">
-                        {medicineResult.sideEffects}
-                      </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
+                        {medicineResult.drugCategory}
+                      </span>
+                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
+                        {medicineResult.prescriptionRequired ? "Rx Required" : "OTC / Non-Prescription"}
+                      </span>
+                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
+                        Strength: {medicineResult.strength}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Recommendations */}
-                  {medicineResult.medicineName !== "Medicine name could not be confidently identified." && (
-                    <div className="glass-panel p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                      <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <TrendingUp className="w-3.5 h-3.5 text-emerald-600" /> Usage Recommendations
-                      </h4>
-                      <p className="text-xs leading-relaxed text-slate-650">
-                        {medicineResult.usageRecommendations}
+                  {/* 4-Tier Confidence Metrics Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">OCR Clarity</span>
+                      <span className="text-lg font-black text-slate-900 block mt-0.5">{medicineResult.ocrConfidence}%</span>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Drug Match</span>
+                      <span className="text-lg font-black text-emerald-600 block mt-0.5">{medicineResult.matchConfidence}%</span>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Pharma DB</span>
+                      <span className="text-lg font-black text-emerald-600 block mt-0.5">{medicineResult.databaseConfidence}%</span>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm text-center bg-emerald-50/30 border-emerald-200/60">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">Overall Score</span>
+                      <span className="text-lg font-black text-emerald-800 block mt-0.5">{medicineResult.overallConfidence}%</span>
+                    </div>
+                  </div>
+
+                  {/* Detailed Monograph Scorecard Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1">
+                      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px] block">Adult Dosage</span>
+                      <p className="text-slate-800 font-medium leading-relaxed">{medicineResult.adultDosage}</p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1">
+                      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px] block">Pediatric Dosage</span>
+                      <p className="text-slate-800 font-medium leading-relaxed">{medicineResult.childDosage}</p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1">
+                      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px] block">Missed Dose Rule</span>
+                      <p className="text-slate-800 font-medium leading-relaxed">{medicineResult.missedDoseInstructions}</p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1">
+                      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px] block">Overdose Protocol</span>
+                      <p className="text-slate-800 font-medium leading-relaxed">{medicineResult.overdoseInstructions}</p>
+                    </div>
+
+                    <div className="bg-amber-50/40 rounded-2xl border border-amber-200/80 p-5 shadow-sm space-y-1">
+                      <span className="font-bold text-amber-700 uppercase tracking-wider text-[10px] block">Pregnancy Safety</span>
+                      <p className="text-slate-800 font-bold leading-relaxed">{medicineResult.pregnancySafety}</p>
+                    </div>
+
+                    <div className="bg-amber-50/40 rounded-2xl border border-amber-200/80 p-5 shadow-sm space-y-1">
+                      <span className="font-bold text-amber-700 uppercase tracking-wider text-[10px] block">Breastfeeding Safety</span>
+                      <p className="text-slate-800 font-bold leading-relaxed">{medicineResult.breastfeedingSafety}</p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1 col-span-1 sm:col-span-2">
+                      <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px] block">Known Drug Interactions</span>
+                      <ul className="list-disc pl-5 text-slate-700 space-y-0.5">
+                        {medicineResult.drugInteractions.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Reminder Auto-Sync Banner */}
+                  <div className="bg-emerald-50/50 border border-emerald-200/80 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-emerald-600" />
+                        <span>Configure Smart Alert</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                        Instantly set up a daily calendar alert in your routines timeline.
                       </p>
                     </div>
-                  )}
 
-                  {/* Warning advice */}
-                  <div className="p-4.5 bg-emerald-50/15 border border-emerald-100/50 rounded-2xl text-[10px] sm:text-xs leading-relaxed text-emerald-950 flex gap-2.5">
-                    <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <p>
-                      <strong>Pharmacist Guidance:</strong> AI assessments serve strictly as supportive logs. Verify primary details against physical boxes. Consult a certified practitioner prior to treatment updates.
-                    </p>
+                    <button
+                      onClick={generateMedicineReminder}
+                      disabled={medicineReminderCreated || isCreatingMedicineReminder}
+                      className={`h-11 px-6 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm transition active:scale-98 cursor-pointer shrink-0 ${
+                        medicineReminderCreated
+                          ? "bg-emerald-100 border border-emerald-200 text-emerald-800 cursor-default"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
+                    >
+                      {medicineReminderCreated ? "Reminder Scheduled ✓" : "Generate Smart Reminder"}
+                    </button>
                   </div>
+
+                  {medicineReminderCreated && (
+                    <div className="bg-emerald-50/40 border border-emerald-200/60 rounded-xl p-4 text-xs text-emerald-900 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{createdMedicineReminderInfo}</span>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

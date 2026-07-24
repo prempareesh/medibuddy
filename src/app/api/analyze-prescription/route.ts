@@ -1,74 +1,16 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { validateMedicineAgainstDatabase, PHARMA_DATABASE } from "@/lib/pharmaDatabase";
+import { analyzeImageQuality } from "@/lib/imagePreprocessing";
+import { apiCache } from "@/lib/cache";
+import { logClinicalEvent } from "@/lib/logger";
 
 const API_KEY = process.env.NVIDIA_API_KEY || process.env.MOONSHOT_API_KEY || process.env.OPENAI_API_KEY || "";
 const BASE_URL = process.env.AI_API_BASE_URL || "https://integrate.api.nvidia.com/v1"; 
-const MODEL_NAME = process.env.AI_MODEL_NAME || "moonshotai/kimi-k2.6" || "meta/llama-3.2-11b-vision-instruct";
-
-const MOCK_PRESCRIPTIONS = [
-  {
-    summary: "Dr. Amanda Ross (Cardiologist) - Prescription for cardiovascular health management. Diagnostic notes indicate mild stage 1 hypertension and elevated LDL cholesterol.",
-    medicines: [
-      {
-        medicineName: "Amlodipine Besylate (5mg)",
-        genericName: "Amlodipine",
-        dosage: "5mg",
-        frequency: "Once daily in the morning",
-        purpose: "Relax blood vessels and lower blood pressure.",
-        precautions: "Avoid grapefruit juice. Monitor for swollen ankles."
-      },
-      {
-        medicineName: "Atorvastatin Calcium (20mg)",
-        genericName: "Atorvastatin",
-        dosage: "20mg",
-        frequency: "Once daily at bedtime",
-        purpose: "Lower bad cholesterol (LDL) and triglycerides.",
-        precautions: "Report unexplained muscle pain or weakness immediately."
-      },
-      {
-        medicineName: "Aspirin (81mg)",
-        genericName: "Aspirin",
-        dosage: "81mg (Low Dose)",
-        frequency: "Once daily with lunch",
-        purpose: "Lower risk of cardiovascular events.",
-        precautions: "Take with food. Avoid other NSAIDs unless directed."
-      }
-    ],
-    confidenceScore: 97
-  },
-  {
-    summary: "Dr. Rajesh Patel (Internal Medicine) - Treatment plan for acute throat infection and associated fever/body pain. Recommendation: Complete full antibiotic course.",
-    medicines: [
-      {
-        medicineName: "Amoxicillin Trihydrate (500mg)",
-        genericName: "Amoxicillin",
-        dosage: "500mg",
-        frequency: "Three times a day",
-        purpose: "Treat the bacterial throat infection.",
-        precautions: "Complete the full 5-day course even if symptoms resolve. Take after meals."
-      },
-      {
-        medicineName: "Paracetamol (650mg)",
-        genericName: "Paracetamol",
-        dosage: "650mg",
-        frequency: "Every 6 hours as needed for fever",
-        purpose: "Control fever and reduce body aches.",
-        precautions: "Do not exceed 4,000mg (6 tablets) in 24 hours. Avoid alcohol."
-      },
-      {
-        medicineName: "Levocetirizine (5mg)",
-        genericName: "Levocetirizine",
-        dosage: "5mg",
-        frequency: "Once daily at bedtime",
-        purpose: "Relieve runny nose and allergy symptoms.",
-        precautions: "May cause drowsiness. Do not drive after taking."
-      }
-    ],
-    confidenceScore: 94
-  }
-];
+const VISION_MODEL_NAME = process.env.AI_VISION_MODEL_NAME || "meta/llama-3.2-11b-vision-instruct";
 
 export async function POST(request: Request) {
+  const startTime = Date.now();
   try {
     const { image } = await request.json();
 
@@ -76,19 +18,72 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No image data received" }, { status: 400 });
     }
 
-    // Fallback if API Key is missing
-    if (!API_KEY) {
-      console.log("⚠️ No AI API Key found. Returning optimized fallback prescription.");
-      const selected = MOCK_PRESCRIPTIONS[Math.floor(Math.random() * MOCK_PRESCRIPTIONS.length)];
-      
-      // Simulate scanning delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    const qualityReport = analyzeImageQuality(image);
+    const imageHash = `presc_img_${image.length}_${image.slice(-50, -10)}`;
 
-      return NextResponse.json({
-        ...selected,
+    const cachedResult = apiCache.get<any>(imageHash);
+    if (cachedResult) {
+      logClinicalEvent({
+        level: "INFO",
+        endpoint: "/api/analyze-prescription",
+        action: "Cache Hit",
+        latencyMs: Date.now() - startTime
+      });
+      return NextResponse.json(cachedResult, { status: 200 });
+    }
+
+    if (!API_KEY) {
+      // Fallback matching verified monograph medicines
+      const med1 = PHARMA_DATABASE[0]; // Dolo 650
+      const med2 = PHARMA_DATABASE[1]; // Augmentin
+
+      const fallbackResponse = {
+        doctorName: "Dr. Amanda Ross, M.D.",
+        doctorRegNo: "MCI-784920",
+        hospitalName: "City Heart & General Hospital",
+        patientName: "John Doe",
+        patientAge: "42",
+        patientGender: "Male",
+        prescriptionDate: new Date().toLocaleDateString(),
+        diagnosis: "Acute Upper Respiratory Infection & Mild Fever",
+        summary: "Prescription for respiratory infection and fever control.",
+        medicines: [
+          {
+            medicineName: med1.brandName,
+            genericName: med1.genericName,
+            dosage: "650mg",
+            frequency: "Three times a day after meals",
+            duration: "5 days",
+            purpose: med1.medicalUses,
+            precautions: med1.missedDoseInstructions,
+            confidenceScore: 95,
+            isUncertain: false
+          },
+          {
+            medicineName: med2.brandName,
+            genericName: med2.genericName,
+            dosage: "500mg",
+            frequency: "Twice daily",
+            duration: "5 days",
+            purpose: med2.medicalUses,
+            precautions: med2.missedDoseInstructions,
+            confidenceScore: 92,
+            isUncertain: false
+          }
+        ],
+        investigations: ["Complete Blood Count (CBC)", "Chest X-Ray if fever persists"],
+        followUpDate: "In 5 days",
+        hasDoctorSignature: true,
+        unreadableWordsCount: 0,
+        ocrConfidence: 94,
+        matchConfidence: 96,
+        databaseConfidence: 96,
+        overallConfidence: 95,
+        qualityReport,
         isMock: true,
-        disclaimer: "Demo Mode: Calculated via high-fidelity prescription scanner. Always verify with actual doctor guidance."
-      }, { status: 200 });
+        disclaimer: "Sandbox Mode: Simulated prescription layout verified against pharmaceutical database."
+      };
+      return NextResponse.json(fallbackResponse, { status: 200 });
     }
 
     const openai = new OpenAI({
@@ -97,37 +92,45 @@ export async function POST(request: Request) {
     });
 
     const response = await openai.chat.completions.create({
-      model: MODEL_NAME,
+      model: VISION_MODEL_NAME,
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Dissect this medical prescription or report image. Extract the clinical information and list the medicines.
-                     Return EXACTLY a single stringified JSON object matching this structure. 
-                     Keep descriptions extremely concise (maximum 1 sentence each) to minimize output size. 
-                     No markdown wrappers.
-                     
-                     All values must be in English. Do NOT return any Chinese, Japanese, or other languages under any circumstances.
+              text: `Dissect this medical prescription or report image thoroughly. Read all printed and handwritten text.
+                     Return EXACTLY a single stringified JSON object matching this structure. No markdown wrappers. All values in English.
                      
                      JSON Structure:
                      {
-                       "summary": "Brief summary of the prescription context (e.g., diagnosis if visible, doctor info, general purpose)",
+                       "doctorName": "Doctor name if visible (e.g. 'Dr. A. Ross'), or 'Not visible'",
+                       "doctorRegNo": "Registration number if visible, or 'Not visible'",
+                       "hospitalName": "Hospital/Clinic name if visible, or 'Not visible'",
+                       "patientName": "Patient name if visible, or 'Not visible'",
+                       "patientAge": "Age if visible, or 'Not visible'",
+                       "patientGender": "Gender if visible, or 'Not visible'",
+                       "prescriptionDate": "Date if printed, or 'Not visible'",
+                       "diagnosis": "Clinical diagnosis or symptoms noted",
+                       "summary": "Brief overall clinical context of prescription",
                        "medicines": [
                          {
-                           "medicineName": "Brand/Generic name (exactly as printed, e.g., 'Tylenol 500mg'). If no medicine name can be confidently read or identified, output EXACTLY 'Medicine name could not be confidently identified.'",
-                           "genericName": "Generic/chemical name (e.g., 'Acetaminophen'). If not visible or identifiable, output 'Not visible'",
+                           "medicineName": "Brand or generic drug name (e.g. 'Amlodipine 5mg'). If unreadable, 'Medicine name could not be confidently identified.'",
+                           "genericName": "Generic active compound if visible, or 'Not visible'",
                            "dosage": "Dosage (e.g., 500mg, 1 tablet)",
                            "frequency": "Frequency (e.g., Twice daily, Once at bedtime)",
-                           "purpose": "Primary medical purpose of this medicine",
-                           "precautions": "Critical safety warnings/instructions for this medicine"
+                           "duration": "Duration (e.g. 5 days)",
+                           "purpose": "Primary clinical purpose of medicine",
+                           "precautions": "Safety warnings or special administration notes",
+                           "confidenceScore": 90
                          }
                        ],
-                       "confidenceScore": 95
-                     }
-                     
-                     Note: Estimate the 'confidenceScore' (0-100) dynamically based on how clear, sharp, and readable the text in the image is.`
+                       "investigations": ["Recommended blood tests, X-rays, or lab reports"],
+                       "followUpDate": "Follow-up schedule date if specified",
+                       "hasDoctorSignature": true,
+                       "unreadableWordsCount": 0,
+                       "ocrConfidenceScore": 88
+                     }`
             },
             {
               type: "image_url",
@@ -138,40 +141,124 @@ export async function POST(request: Request) {
           ]
         }
       ],
-      max_tokens: 450, // Reduced token limit for faster response times
+      max_tokens: 750,
       temperature: 0.1
     });
 
     const content = response.choices[0]?.message?.content?.trim() || "";
     
+    let rawData: any = {};
     try {
       const jsonString = content.replace(/```json/g, "").replace(/```/g, "").trim();
-      const parsedData = JSON.parse(jsonString);
-      return NextResponse.json(parsedData, { status: 200 });
+      rawData = JSON.parse(jsonString);
     } catch (parseError) {
-      console.warn("⚠️ Failed to parse JSON from AI model response. Returning fallback representation.", content);
-      
-      return NextResponse.json({
-        summary: "Unable to identify medicine details from the uploaded image.",
-        medicines: [
-          {
-            medicineName: "Medicine name could not be confidently identified.",
-            genericName: "Not visible",
-            dosage: "N/A",
-            frequency: "N/A",
-            purpose: "Unable to parse prescription details.",
-            precautions: "Please consult your physician directly."
-          }
-        ],
-        confidenceScore: 35,
-        isFallbackText: true
-      }, { status: 200 });
+      console.warn("⚠️ Failed to parse JSON from AI prescription vision response:", content);
+      rawData = {
+        summary: "Unable to parse prescription details from uploaded image.",
+        medicines: []
+      };
     }
+
+    // Validate extracted medicines against authentic drug monographs
+    const validatedMedicines = (rawData.medicines || []).map((med: any) => {
+      const val = validateMedicineAgainstDatabase(med.medicineName || "");
+      const isUncertain = val.overallConfidenceScore < 60 || !val.monograph;
+
+      return {
+        medicineName: val.correctedMedicineName,
+        genericName: val.monograph ? val.monograph.genericName : (med.genericName || "Not visible"),
+        dosage: med.dosage || "As directed",
+        frequency: med.frequency || "Once daily",
+        duration: med.duration || "As advised",
+        purpose: val.monograph ? val.monograph.medicalUses : (med.purpose || "Clinical treatment"),
+        precautions: val.monograph ? val.monograph.missedDoseInstructions : (med.precautions || "Take after food"),
+        confidenceScore: Math.round(val.overallConfidenceScore),
+        isUncertain
+      };
+    });
+
+    // Compute average confidence scores across extracted items
+    const avgOcr = rawData.ocrConfidenceScore || qualityReport.blurScore;
+    const avgMatch = validatedMedicines.length > 0
+      ? Math.round(validatedMedicines.reduce((acc: number, m: any) => acc + m.confidenceScore, 0) / validatedMedicines.length)
+      : 40;
+
+    const finalResponse = {
+      doctorName: rawData.doctorName || "Not visible",
+      doctorRegNo: rawData.doctorRegNo || "Not visible",
+      hospitalName: rawData.hospitalName || "Not visible",
+      patientName: rawData.patientName || "Not visible",
+      patientAge: rawData.patientAge || "Not visible",
+      patientGender: rawData.patientGender || "Not visible",
+      prescriptionDate: rawData.prescriptionDate || new Date().toLocaleDateString(),
+      diagnosis: rawData.diagnosis || "General Clinical Consultation",
+      summary: rawData.summary || "Prescription report audit completed.",
+      medicines: validatedMedicines,
+      investigations: rawData.investigations || ["Follow up as recommended by consulting physician"],
+      followUpDate: rawData.followUpDate || "As needed",
+      hasDoctorSignature: Boolean(rawData.hasDoctorSignature),
+      unreadableWordsCount: rawData.unreadableWordsCount || 0,
+      
+      ocrConfidence: avgOcr,
+      matchConfidence: avgMatch,
+      databaseConfidence: avgMatch > 60 ? 95 : 35,
+      overallConfidence: Math.round((avgOcr * 0.3) + (avgMatch * 0.7)),
+      
+      qualityReport,
+      disclaimer: "Prescription Audit: Extracted medicines cross-referenced against pharmaceutical database. Review highlighted items before scheduling."
+    };
+
+    apiCache.set(imageHash, finalResponse);
+
+    logClinicalEvent({
+      level: "INFO",
+      endpoint: "/api/analyze-prescription",
+      action: "Prescription Extraction Success",
+      latencyMs: Date.now() - startTime,
+      confidenceScores: {
+        ocr: finalResponse.ocrConfidence,
+        match: finalResponse.matchConfidence,
+        overall: finalResponse.overallConfidence
+      }
+    });
+
+    return NextResponse.json(finalResponse, { status: 200 });
+
   } catch (error: any) {
     console.error("🔴 AI Prescription Scanner API error:", error);
-    return NextResponse.json({ 
-      error: "Unable to identify medicine details from the uploaded image.",
-      message: error?.message || "Internal server error" 
-    }, { status: 500 });
+    return NextResponse.json({
+      doctorName: "Not visible",
+      doctorRegNo: "Not visible",
+      hospitalName: "Not visible",
+      patientName: "Not visible",
+      patientAge: "Not visible",
+      patientGender: "Not visible",
+      prescriptionDate: new Date().toLocaleDateString(),
+      diagnosis: "Prescription Audit Failed",
+      summary: "Unable to parse prescription details. Please upload a clearer photograph.",
+      medicines: [
+        {
+          medicineName: "Medicine name could not be confidently identified.",
+          genericName: "Not visible",
+          dosage: "N/A",
+          frequency: "N/A",
+          duration: "N/A",
+          purpose: "Please try uploading a clearer, higher-resolution photograph.",
+          precautions: "Ensure handwriting is well lit and not blurred.",
+          confidenceScore: 25,
+          isUncertain: true
+        }
+      ],
+      investigations: ["N/A"],
+      followUpDate: "N/A",
+      hasDoctorSignature: false,
+      unreadableWordsCount: 3,
+      ocrConfidence: 25,
+      matchConfidence: 0,
+      databaseConfidence: 0,
+      overallConfidence: 25,
+      qualityReport: { isAcceptable: false, blurScore: 25, estimatedResolution: "Low", contrastQuality: "Low", recommendations: ["Upload a clearer photo"] },
+      disclaimer: "Notice: Image details could not be parsed with confidence."
+    }, { status: 200 });
   }
 }

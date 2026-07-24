@@ -42,21 +42,23 @@ export default function Navbar() {
         </Link>
 
         {/* Spacious Nav */}
-        <nav className="hidden md:flex items-center gap-10">
+        <nav className="hidden md:flex items-center gap-8 h-full">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className="relative text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors duration-250"
+                className={`relative h-full flex items-center text-xs font-extrabold uppercase tracking-wider transition-colors duration-200 ${
+                  isActive ? "text-slate-900 font-extrabold" : "text-slate-400 hover:text-slate-700"
+                }`}
               >
                 {item.name}
                 {isActive && (
                   <motion.span
                     layoutId="activeNavLine"
-                    className="absolute -bottom-8 left-0 right-0 h-[1.5px] bg-slate-900"
-                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-slate-900 rounded-t-full"
+                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
                   />
                 )}
               </Link>
@@ -68,7 +70,7 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-4">
           <Link
             href="/dashboard"
-            className="px-6 py-2.5 rounded-full bg-slate-950 hover:bg-slate-900 text-white font-bold text-[10px] uppercase tracking-widest shadow-sm hover:shadow active:scale-98 transition-all duration-200"
+            className="h-10 px-5 rounded-xl bg-slate-950 hover:bg-slate-850 text-white font-bold text-xs uppercase tracking-wider shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-98 transition-all duration-200 flex items-center justify-center"
           >
             Launch Platform
           </Link>
