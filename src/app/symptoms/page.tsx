@@ -181,6 +181,9 @@ const playCalmChime = () => {
 
 export default function ClinicalTriageAssistant() {
   const [language, setLanguage] = useState<"english" | "hindi" | "telugu">("english");
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [ttsErrorMessage, setTtsErrorMessage] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome-1",
@@ -226,8 +229,24 @@ export default function ClinicalTriageAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
+  // Load available speech synthesis voices dynamically
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const updateVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+    };
+
+    updateVoices();
+    if (typeof window.speechSynthesis.onvoiceschanged !== "undefined") {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
   const handleLanguageSelect = (newLang: "english" | "hindi" | "telugu") => {
     setLanguage(newLang);
+    setTtsErrorMessage(null);
     setMessages((prev) => {
       if (prev.length === 1 && prev[0].id === "welcome-1") {
         return [{
@@ -278,9 +297,66 @@ export default function ClinicalTriageAssistant() {
     }
   };
 
+  // Helper to find the best matching voice preferring Indian voices
+  const getBestVoice = (langKey: "english" | "hindi" | "telugu"): { voice: SpeechSynthesisVoice | null; targetLocale: string } => {
+    const targetLocale = langKey === "hindi" ? "hi-IN" : langKey === "telugu" ? "te-IN" : "en-IN";
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return { voice: null, targetLocale };
+    }
+
+    const voices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    const primaryLang = langKey === "hindi" ? "hi" : langKey === "telugu" ? "te" : "en";
+
+    let bestVoice: SpeechSynthesisVoice | null = null;
+    let highestScore = 0;
+
+    for (const v of voices) {
+      const vLang = (v.lang || "").replace("_", "-").toLowerCase();
+      const vName = (v.name || "").toLowerCase();
+
+      let score = 0;
+
+      if (vLang === targetLocale.toLowerCase()) {
+        score = 90;
+        if (vName.includes("india") || vName.includes("in") || vName.includes("google") || vName.includes("natural")) {
+          score = 100;
+        }
+      } else if (vLang.startsWith(primaryLang)) {
+        score = 70;
+        if (vName.includes("india") || vName.includes("in") || vName.includes(langKey)) {
+          score = 80;
+        }
+      } else if (
+        (langKey === "telugu" && (vName.includes("telugu") || vName.includes("తెలుగు"))) ||
+        (langKey === "hindi" && (vName.includes("hindi") || vName.includes("हिन्दी"))) ||
+        (langKey === "english" && (vName.includes("english") || vName.includes("india")))
+      ) {
+        score = 60;
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        bestVoice = v;
+      }
+    }
+
+    return { voice: bestVoice, targetLocale };
+  };
+
   const speakText = (text: string) => {
     if (isVoiceMuted || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    
+    // Always cancel active speech before speaking a new response
     window.speechSynthesis.cancel();
+
+    const { voice, targetLocale } = getBestVoice(language);
+
+    if (!voice) {
+      setTtsErrorMessage("The selected language voice is not installed on this device.");
+      return;
+    } else {
+      setTtsErrorMessage(null);
+    }
 
     let cleanText = text;
     try {
@@ -291,8 +367,41 @@ export default function ClinicalTriageAssistant() {
     }
 
     const utterance = new SpeechSynthesisUtterance(cleanText.slice(0, 300));
-    utterance.lang = language === "hindi" ? "hi-IN" : language === "telugu" ? "te-IN" : "en-IN";
+    utterance.voice = voice;
+    utterance.lang = targetLocale;
     utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleVoicePreview = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setTtsErrorMessage("Speech synthesis is not supported in this browser.");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const { voice, targetLocale } = getBestVoice(language);
+
+    if (!voice) {
+      setTtsErrorMessage("The selected language voice is not installed on this device.");
+      return;
+    }
+
+    setTtsErrorMessage(null);
+
+    const sampleTexts = {
+      english: "Hello! This is a preview of the MediBuddy AI Indian English voice.",
+      hindi: "नमस्ते! यह मेडीबडी एआई हिंदी आवाज का पूर्वावलोकन है।",
+      telugu: "నమస్కారం! ఇది మెడిబడ్డీ AI తెలుగు స్వరం ముందస్తు ప్రదర్శన."
+    };
+
+    const previewText = sampleTexts[language] || sampleTexts.english;
+    const utterance = new SpeechSynthesisUtterance(previewText);
+    utterance.voice = voice;
+    utterance.lang = targetLocale;
+    utterance.rate = 0.95;
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -537,15 +646,41 @@ export default function ClinicalTriageAssistant() {
             </select>
 
             <button
+              onClick={handleVoicePreview}
+              className="h-10 px-3.5 rounded-xl bg-white border border-slate-200/80 hover:bg-emerald-50 hover:border-emerald-200 text-xs font-bold text-slate-700 shadow-sm cursor-pointer flex items-center gap-2 transition active:scale-97"
+              title="Preview selected language voice"
+            >
+              <Volume2 className="w-4 h-4 text-emerald-600" />
+              <span>Voice Preview</span>
+            </button>
+
+            <button
               onClick={() => setIsVoiceMuted(!isVoiceMuted)}
               className={`w-10 h-10 rounded-xl border flex items-center justify-center transition cursor-pointer ${
                 isVoiceMuted ? "bg-slate-100 border-slate-200 text-slate-400" : "bg-emerald-50 border-emerald-200 text-emerald-600 shadow-sm"
               }`}
+              title={isVoiceMuted ? "Unmute Voice Output" : "Mute Voice Output"}
             >
               {isVoiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>
           </div>
         </div>
+
+        {/* TTS Missing Voice Alert Banner */}
+        {ttsErrorMessage && (
+          <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between shadow-sm animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{ttsErrorMessage}</span>
+            </div>
+            <button
+              onClick={() => setTtsErrorMessage(null)}
+              className="text-amber-700 hover:text-amber-900 text-xs font-extrabold uppercase underline ml-4 cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* 22-Parameter Patient Intake Collapsible Drawer */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
